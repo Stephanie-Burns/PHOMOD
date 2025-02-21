@@ -1,29 +1,121 @@
+import logging
+import os
+import threading
+import random
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import threading
 
+# Setup logging
+LOGS_DIR = "logs"
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+def configure_logger(name, log_to_console=True, log_to_file=True, level=logging.INFO):
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.propagate = False
+
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)-8s | %(module)s - %(funcName)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    if log_to_console:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+    if log_to_file:
+        log_file = os.path.join(LOGS_DIR, f"{name}.log")
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    return logger
+
+app_logger = configure_logger('FOMODLogger')
+
+# Import your portable image viewer widget
+from prototype_image_manip import ImageViewerWidget
+
+# ttkthemes is now a project requirement.
+from ttkthemes import ThemedTk
+
+# ----------------------------
+# ThemeManager: Centralize theme logic.
+# ----------------------------
+class ThemeManager:
+    def __init__(self, root):
+        self.root = root
+
+    def get_themes(self):
+        return self.root.get_themes()
+
+    def apply_theme(self, theme):
+        try:
+            self.root.set_theme(theme)
+            app_logger.info(f"Applied theme: {theme}")
+        except tk.TclError as e:
+            app_logger.error(f"Error applying theme '{theme}': {e}")
+        self.root.update_idletasks()
+
+# ----------------------------
+# BaseTab: common functionality
+# ----------------------------
 class BaseTab(ttk.Frame):
-    """A base class for all tabs."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.controller = controller
 
+    def bind_help_message(self, widget, help_text=None):
+        if help_text is not None:
+            widget.bind("<Enter>", lambda event: self.controller.update_status(help_text))
+        widget.bind("<Leave>", lambda event: self.controller.update_status("Ready"))
 
+# ----------------------------
+# ProjectTab: Handles project selection, recent projects, and mod tree view.
+# ----------------------------
 class ProjectTab(BaseTab):
-    """Project tab containing folder selection, recent projects, and a mod tree view."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
+        self.sidebar_visible = True
+        app_logger.info("Initializing ProjectTab")
         self.create_widgets()
 
     def create_widgets(self):
-        paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True)
+        self.create_top_bar()
+        self.create_paned_area()
 
-        # Sidebar - Recent Projects with a vertical scrollbar.
-        sidebar = ttk.Frame(paned, width=200)
-        paned.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="Recent Projects:").pack(anchor="w", padx=5, pady=5)
-        listbox_frame = ttk.Frame(sidebar)
+    def create_top_bar(self):
+        top_bar = ttk.Frame(self)
+        top_bar.pack(fill=tk.X, padx=5, pady=5)
+        self.toggle_label = ttk.Label(top_bar, text="◀ Recent Projects",
+                                      cursor="hand2", font=("Arial", 10, "bold"), anchor="w")
+        self.toggle_label.pack(side="left", fill=tk.X, expand=True, padx=(0, 10))
+        self.toggle_label.bind("<Button-1>", self.toggle_sidebar)
+        self.bind_help_message(self.toggle_label, "Click to collapse or expand the Recent Projects sidebar.")
+
+        folder_frame = ttk.Frame(top_bar)
+        folder_frame.pack(side="left", fill=tk.X, expand=True)
+        self.project_label = ttk.Label(folder_frame, text="Select a Mod Folder:")
+        self.project_label.pack(side="left", padx=(0, 5))
+        self.project_entry = ttk.Entry(folder_frame, width=40)
+        self.project_entry.pack(side="left", fill=tk.X, expand=True, padx=(0, 10))
+        self.browse_button = ttk.Button(folder_frame, text="Browse", command=self.select_folder)
+        self.browse_button.pack(side="left")
+
+    def create_paned_area(self):
+        self.paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        self.paned.pack(fill=tk.BOTH, expand=True)
+        self.create_sidebar()
+        self.create_main_area()
+
+    def create_sidebar(self):
+        self.sidebar = ttk.Frame(self.paned, width=200)
+        self.paned.add(self.sidebar, weight=1)
+        listbox_frame = ttk.Frame(self.sidebar)
         listbox_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.recent_projects = tk.Listbox(listbox_frame, height=10)
         self.recent_projects.pack(side="left", fill=tk.BOTH, expand=True)
@@ -32,24 +124,11 @@ class ProjectTab(BaseTab):
         self.recent_projects.configure(yscrollcommand=list_scroll.set)
         self.recent_projects.bind("<Double-Button-1>", self.load_recent_project)
 
-        # Main Area - Use a frame for folder selection (picker) and a separate frame for the tree.
-        main_frame = ttk.Frame(paned)
-        paned.add(main_frame, weight=3)
-
-        # Picker frame: does not expand vertically.
-        picker_frame = ttk.Frame(main_frame)
-        picker_frame.pack(fill=tk.X, padx=5, pady=(32, 10))
-        self.project_label = ttk.Label(picker_frame, text="Select a Mod Folder:")
-        self.project_label.pack(side="left", padx=(0, 5))
-        self.project_entry = ttk.Entry(picker_frame, width=40)
-        self.project_entry.pack(side="left", fill=tk.X, expand=True, padx=(0, 10))
-        self.browse_button = ttk.Button(picker_frame, text="Browse", command=self.select_folder)
-        self.browse_button.pack(side="left")
-
-        # Treeview frame: fills remaining vertical space.
-        tree_frame = ttk.Frame(main_frame)
+    def create_main_area(self):
+        self.main_frame = ttk.Frame(self.paned)
+        self.paned.add(self.main_frame, weight=3)
+        tree_frame = ttk.Frame(self.main_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        # Update columns: now includes Install Type.
         self.tree = ttk.Treeview(tree_frame,
                                  columns=("Type", "Install Type", "Desc?", "Img?"),
                                  show="tree headings")
@@ -69,37 +148,20 @@ class ProjectTab(BaseTab):
         self.tree.configure(yscrollcommand=tree_scroll.set)
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
 
-        # Enable inline renaming and drag-and-drop support.
-        self.tree.bind("<F2>", self.inline_rename)
-        self.enable_drag_drop()
-
-        # Disable resizing for fixed columns (Desc? and Img?).
-        def disable_resize_for_fixed_columns(event):
-            # Check if the click is on a column separator.
-            if self.tree.identify_region(event.x, event.y) == "separator":
-                col = self.tree.identify_column(event.x)
-                # If either side of the separator is a fixed column,
-                # block resizing.
-                if col in ("#1", "#2", "#3", "#4"):
-                    # Also check a few pixels to the left.
-                    left_col = self.tree.identify_column(event.x - 5)
-                    if left_col in ("#1", "#2", "#3", "#4"):
-                        return "break"
-
-        self.tree.bind('<Button-1>', disable_resize_for_fixed_columns)
-
-        def disable_cursor_on_fixed(event):
-            if self.tree.identify_region(event.x, event.y) == "separator":
-                col = self.tree.identify_column(event.x)
-                if col in ("#1", "#2", "#3", "#4"):
-                    left_col = self.tree.identify_column(event.x - 5)
-                    if left_col in ("#1", "#2", "#3", "#4"):
-                        return "break"
-        self.tree.bind('<Motion>', disable_cursor_on_fixed)
+    def toggle_sidebar(self, event=None):
+        app_logger.info("Toggling sidebar visibility")
+        if self.sidebar_visible:
+            self.paned.forget(self.sidebar)
+            self.toggle_label.config(text="▶ Recent Projects")
+        else:
+            self.paned.insert(0, self.sidebar, weight=1)
+            self.toggle_label.config(text="◀ Recent Projects")
+        self.sidebar_visible = not self.sidebar_visible
 
     def select_folder(self):
         folder = filedialog.askdirectory()
         if folder:
+            app_logger.info(f"Folder selected: {folder}")
             self.project_entry.delete(0, tk.END)
             self.project_entry.insert(0, folder)
 
@@ -107,97 +169,51 @@ class ProjectTab(BaseTab):
         selected_index = self.recent_projects.curselection()
         if selected_index:
             selected_path = self.recent_projects.get(selected_index)
+            app_logger.info(f"Loading recent project: {selected_path}")
             self.project_entry.delete(0, tk.END)
             self.project_entry.insert(0, selected_path)
 
     def on_tree_select(self, event):
         selected = self.tree.selection()
-        self.controller.enable_details_tab(enable=bool(selected))
-
-    def inline_rename(self, event):
-        selected_item = self.tree.selection()
-        if not selected_item:
-            return
-        item_id = selected_item[0]
-        item_text = self.tree.item(item_id, "text")
-        entry = ttk.Entry(self.tree)
-        entry.insert(0, item_text)
-        entry.select_range(0, tk.END)
-        entry.focus()
-
-        def save_new_name(event=None):
-            new_name = entry.get().strip()
-            if new_name:
-                self.tree.item(item_id, text=new_name)
-            entry.destroy()
-
-        entry.bind("<Return>", save_new_name)
-        entry.bind("<FocusOut>", save_new_name)
-        bbox = self.tree.bbox(item_id)
-        if bbox:
-            x, y, width, _ = bbox
-            self.tree.place(x=x, y=y, width=width)
-
-    def enable_drag_drop(self):
-        self.tree.bind("<B1-Motion>", self.drag_item)
-        self.tree.bind("<ButtonRelease-1>", self.drop_item)
-        self.dragged_item = None
-
-    def drag_item(self, event):
-        item = self.tree.identify_row(event.y)
-        if item:
-            self.dragged_item = item
-
-    def drop_item(self, event):
-        if not self.dragged_item:
-            return
-        target_item = self.tree.identify_row(event.y)
-        if target_item and self.dragged_item != target_item:
-            parent = self.tree.parent(target_item)
-            index = self.tree.index(target_item)
-            self.tree.move(self.dragged_item, parent, index)
-        self.dragged_item = None
+        app_logger.info(f"Tree selection changed: {selected}")
+        self.controller.toggle_details_tab(enable=bool(selected))
 
 
-
+# ----------------------------
+# DetailsTab: Handles plugin details, including an image viewer and description editor.
+# ----------------------------
 class DetailsTab(BaseTab):
-    """Details tab for editing plugin information."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
+        app_logger.info("Initializing DetailsTab")
         self.create_widgets()
 
     def create_widgets(self):
         paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True)
-
-        # Left Panel - Image Selection
         left_frame = ttk.Frame(paned, width=250)
         paned.add(left_frame, weight=1)
         ttk.Label(left_frame, text="Plugin Image:").pack(anchor="w", padx=5, pady=5)
-        self.image_preview = ttk.Label(left_frame, text="No Image Selected", relief=tk.SUNKEN)
-        self.image_preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.image_button = ttk.Button(left_frame, text="Select Image", command=self.select_image)
-        self.image_button.pack(pady=5, padx=5)
-
-        # Right Panel - Description Editor
+        self.image_viewer = ImageViewerWidget(left_frame, width=250, height=150)
+        self.image_viewer.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         right_frame = ttk.Frame(paned)
         paned.add(right_frame, weight=3)
         ttk.Label(right_frame, text="Description:").pack(anchor="w", padx=5, pady=5)
         self.description_text = tk.Text(right_frame, height=10, wrap=tk.WORD)
         self.description_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        app_logger.info("DetailsTab widgets created")
 
-    def select_image(self):
-        file_path = filedialog.askopenfilename(
-            # filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp")]
-        )
-        if file_path:
-            self.image_preview.config(text=file_path.split("/")[-1])
+    def get_image_path(self):
+        return self.image_viewer.get_image_path()
 
 
+# ----------------------------
+# XMLTab: Shows generated XML preview and export.
+# ----------------------------
 class XMLTab(BaseTab):
-    """XML Preview and Export tab."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
+        app_logger.info("Initializing XMLTab")
         self.create_widgets()
 
     def create_widgets(self):
@@ -206,40 +222,178 @@ class XMLTab(BaseTab):
         self.xml_preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.generate_button = ttk.Button(self, text="Generate XML", command=self.start_generate_xml)
         self.generate_button.pack(pady=5, padx=5)
+        app_logger.info("XMLTab widgets created")
 
     def start_generate_xml(self):
+        app_logger.info("Starting XML generation")
         threading.Thread(target=self.generate_xml, daemon=True).start()
 
     def generate_xml(self):
         self.xml_preview.delete("1.0", tk.END)
         self.xml_preview.insert("1.0", "<config>\n  <!-- XML Content Here -->\n</config>")
+        app_logger.info("XML generated")
 
 
+# ----------------------------
+# SettingsTab: Handles theme selection and additional settings.
+# ----------------------------
 class SettingsTab(BaseTab):
-    """Settings tab for theme selection and customization."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
-        self.create_widgets()
+        app_logger.info("Initializing SettingsTab")
+        self.create_scrollable_widgets()
 
-    def create_widgets(self):
-        ttk.Label(self, text="Theme Selection:").pack(anchor="w", padx=5, pady=5)
+    def create_scrollable_widgets(self):
+        # Create a container frame that holds a canvas and scrollbar.
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        self.canvas = tk.Canvas(container, borderwidth=0, highlightthickness=0)
+        vsb = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=vsb.set)
+
+        vsb.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill=tk.BOTH, expand=True)
+
+        # Create a frame inside the canvas to hold all settings widgets.
+        self.inner_frame = ttk.Frame(self.canvas)
+        self.inner_window = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
+
+        self.inner_frame.bind("<Configure>", self._on_frame_configure)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+
+        self.create_widgets_in_inner()
+
+    def _on_frame_configure(self, event):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        self.canvas.itemconfigure(self.inner_window, width=event.width)
+
+    def create_widgets_in_inner(self):
+        # ==== Theme Selection Section
+        themes = self.controller.get_themes()
+        themes_always_on_top = ["Default", "Random"]
+        themes_alphabetical = [t for t in themes if t.lower() not in [s.lower() for s in themes_always_on_top]]
+        themes_alphabetical = sorted([t.capitalize() for t in themes_alphabetical])
+        theme_separator = "----------"
+        theme_options = themes_always_on_top + [theme_separator] + themes_alphabetical
+
+        theme_frame = ttk.Labelframe(self.inner_frame, text="Theme Selection")
+        theme_frame.pack(fill=tk.X, padx=5, pady=5, expand=True)
+
         self.theme_var = tk.StringVar(value="Default")
-        self.theme_menu = ttk.Combobox(
-            self, textvariable=self.theme_var,
-            values=["Default", "Dark", "Light", "Custom"]
-        )
-        self.theme_menu.pack(padx=5, pady=5)
-        ttk.Button(self, text="Apply Theme", command=self.apply_theme).pack(pady=10)
+        self.theme_menu = ttk.Combobox(theme_frame, textvariable=self.theme_var, values=theme_options, state="readonly")
+        self.theme_menu.pack(fill=tk.X, padx=5, pady=5)
+        self.theme_menu.bind("<<ComboboxSelected>>", self.on_theme_selected)
+
+        self.current_theme_label = ttk.Label(theme_frame, text="Current Theme: Default", font=("Arial", 10, "italic"))
+        self.current_theme_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+
+        self.bind_help_message(self.theme_menu, "Select a theme. 'Default' and 'Random' are at the top.")
+        self.bind_help_message(self.current_theme_label, "Displays the currently active theme.")
+
+        # ==== Logging Settings Section
+        log_frame = ttk.Labelframe(self.inner_frame, text="Logging Settings")
+        log_frame.pack(fill=tk.X, padx=5, pady=10, expand=True)
+
+        ttk.Label(log_frame, text="Log Level:").pack(anchor="w", padx=5, pady=(5, 0))
+
+        self.log_level_var = tk.StringVar(value="INFO")
+        self.log_level_menu = ttk.Combobox(log_frame, textvariable=self.log_level_var,
+                                           values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                                           state="readonly")
+        self.log_level_menu.pack(fill=tk.X, padx=5, pady=(5, 25))
+        self.bind_help_message(self.log_level_menu, "Select the minimum log level to display.")
+
+        ttk.Button(log_frame, text="Configure Rotation", command=self.configure_log_rotation).pack(padx=5, pady=5)
+
+        # ==== Update Settings Section
+        update_frame = ttk.Labelframe(self.inner_frame, text="Update Settings")
+        update_frame.pack(fill=tk.X, padx=5, pady=10, expand=True)
+
+        self.auto_update_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(update_frame, text="Automatically check for updates",
+                        variable=self.auto_update_var).pack(anchor="w", padx=5, pady=5)
+
+        ttk.Button(update_frame, text="Check Now", command=self.check_for_updates).pack(padx=5, pady=5)
+        self.bind_help_message(update_frame, "Configure update settings for the application.")
+
+        # ==== Language Section
+        lang_frame = ttk.Labelframe(self.inner_frame, text="Language")
+        lang_frame.pack(fill=tk.X, padx=5, pady=10, expand=True)
+
+        ttk.Label(lang_frame, text="Select Language:").pack(anchor="w", padx=5, pady=(5, 0))
+
+        self.lang_var = tk.StringVar(value="English")
+        self.lang_menu = ttk.Combobox(lang_frame, textvariable=self.lang_var,
+                                      values=["English", "Spanish", "French", "German"],
+                                      state="readonly")
+        self.lang_menu.pack(anchor="w", padx=5, pady=5)
+
+
+        ttk.Button(lang_frame, text="Help Translate", command=self.ask_for_translation_help).pack(padx=5, pady=(5, 25))
+
+        self.bind_help_message(self.lang_menu, "Select the language for the application interface.")
+
+        # === About Section
+        about_frame = ttk.Labelframe(self.inner_frame, text="About")
+        about_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=10)
+
+        about_text = ("PHOMOD - Mod Organizer\nVersion 1.0\n\n"
+                      "Developed by Stephanie Burns\n"
+                      "Visit the GitHub repository for more info!")
+        about_label = ttk.Label(about_frame, text=about_text, justify="center", anchor="center")
+        about_label.pack(expand=True, padx=5, pady=5)
+        self.bind_help_message(about_frame, "About information.")
+
+        self.after(0, lambda: self.on_theme_selected(None))
+
+        app_logger.info("SettingsTab widgets created")
+
+    def on_theme_selected(self, event):
+        self.apply_theme()
 
     def apply_theme(self):
         theme = self.theme_var.get()
-        print(f"Applying theme: {theme}")
+        if theme == self.separator:
+            self.controller.update_status("Please select a valid theme.")
+            return
+        if theme.lower() == "random":
+            all_themes = self.controller.get_themes()
+            choices = [t for t in all_themes if t.lower() != "default"]
+            theme = random.choice(choices) if choices else "default"
+        display_theme = theme.capitalize()
+        self.controller.theme_manager.apply_theme(theme.lower())
+        self.current_theme_label.config(text=f"Current Theme: {display_theme}")
+        self.controller.update_status(f"Theme set to {display_theme}.")
+
+        app_logger.info(f"Theme applied: {display_theme}")
+
+    def configure_log_rotation(self):
+        self.controller.update_status("Log rotation configuration is not yet implemented.")
+        app_logger.info("Configure log rotation button pressed.")
+
+    def check_for_updates(self):
+        self.controller.update_status("Checking for updates...")
+        app_logger.info("Checking for updates...")
+        threading.Timer(2.0, lambda: self.controller.update_status("No updates available.")).start()
+        app_logger.info("Update check completed.")
+
+    def ask_for_translation_help(self):
+        self.controller.update_status("Translation help requested.")
+        app_logger.info("Translation help button pressed.")
+        messagebox.showinfo("Translation Help", "Please visit our GitHub page to contribute translations.")
 
 
+
+# ----------------------------
+# DocumentationTab: In-app help and documentation.
+# ----------------------------
 class DocumentationTab(BaseTab):
-    """Documentation tab for in-app help."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
+        app_logger.info("Initializing DocumentationTab")
         self.create_widgets()
 
     def create_widgets(self):
@@ -256,61 +410,74 @@ class DocumentationTab(BaseTab):
         self.doc_text.insert("1.0", doc_text)
         self.doc_text.configure(state="disabled")
         self.doc_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        app_logger.info("DocumentationTab widgets created")
 
-
+# ----------------------------
+# LogsTab: Displays application event logs.
+# ----------------------------
 class LogsTab(BaseTab):
-    """Logs tab to display event logs."""
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
+        app_logger.info("Initializing LogsTab")
         self.create_widgets()
 
     def create_widgets(self):
         ttk.Label(self, text="Event Logs:").pack(anchor="w", padx=5, pady=5)
         self.log_text = tk.Text(self, wrap=tk.WORD, height=10, state="disabled")
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        app_logger.info("LogsTab widgets created")
 
-
-class PhomodUI(tk.Tk):
+# ----------------------------
+# PhomodUI: Main application window managing tabs, status bar, and theme logic.
+# ----------------------------
+class PhomodUI(ThemedTk):
     def __init__(self):
-        super().__init__()
+        super().__init__(theme="arc")
         self.title("PHOMOD - Mod Organizer")
         self.geometry("1000x618")
         self.minsize(width=1000, height=550)
+        self.style = ttk.Style(self)
+        self.theme_manager = ThemeManager(self)
+        self.theme_manager.apply_theme("arc")  # Apply default theme
+        self.create_status_bar()
+        self.create_notebook()
+        self.create_tabs()
+        self.notebook.bind("<<NotebookTabChanged>>", self.toggle_tab_emoji)
+        app_logger.info("Application started.")
 
-        # Create the main notebook
+    def create_notebook(self):
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, pady=(5,0))
+        self.notebook.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
 
-        # Create tabs as before...
+    def create_tabs(self):
         self.tab_config = {
             "project": {"default": "📦", "active": "🚚", "label": "Project", "class": ProjectTab},
             "details": {"default": "🖌️", "active": "🎨", "label": "Details", "class": DetailsTab},
             "xml": {"default": "🍳", "active": "🍽️", "label": "XML Preview", "class": XMLTab},
-            "settings": {"default": "⚙️", "active": "🔧", "label": "Settings", "class": SettingsTab},
             "logs": {"default": "🌲", "active": "🪵", "label": "Logs", "class": LogsTab},
-            "docs": {"default": "📔", "active": "📖", "label": "Documentation", "class": DocumentationTab},
+            "settings": {"default": "⚙️", "active": "🔧", "label": "Settings", "class": SettingsTab},
+            "docs": {"default": "📔", "active": "📖", "label": "Help", "class": DocumentationTab},
+
         }
         self.tabs = {}
-        self.create_tabs()
-        self.notebook.bind("<<NotebookTabChanged>>", self.toggle_tab_emoji)
+        for key, config in self.tab_config.items():
+            tab_frame = config["class"](self.notebook, controller=self)
+            self.notebook.add(tab_frame, text=f" {config['default']}   {config['label']}"    )
+            self.tabs[key] = tab_frame
+            app_logger.info(f"Tab created: {config['label']}")
 
-        # Create the status bar (the "help" field at the bottom)
+    def create_status_bar(self):
         self.status_var = tk.StringVar(value="Ready")
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor="w")
         self.status_bar.pack(side="bottom", fill="x", padx=5, pady=5)
-
-    def create_tabs(self):
-        for key, config in self.tab_config.items():
-            tab_frame = config["class"](self.notebook, controller=self)
-            self.notebook.add(tab_frame, text=f"{config['default']} {config['label']}")
-            self.tabs[key] = tab_frame
+        self.style.configure("TLabel", background=self["background"])
 
     def toggle_tab_emoji(self, event):
         current_tab_id = self.notebook.index(self.notebook.select())
         current_text = self.notebook.tab(current_tab_id, "text")
         for key, config in self.tab_config.items():
             if config["label"] in current_text:
-                new_text = f"{config['active']} {config['label']}"
+                new_text = f" {config['active']}   {config['label']}    "
                 break
         else:
             return
@@ -318,10 +485,11 @@ class PhomodUI(tk.Tk):
             tab_text = self.notebook.tab(tab_id, "text")
             for key, config in self.tab_config.items():
                 if config["label"] in tab_text:
-                    self.notebook.tab(tab_id, text=f"{config['default']} {config['label']}")
+                    self.notebook.tab(tab_id, text=f" {config['default']}   {config['label']}    ")
         self.notebook.tab(current_tab_id, text=new_text)
+        app_logger.info(f"Switched to tab: {current_text}")
 
-    def enable_details_tab(self, enable=True):
+    def toggle_details_tab(self, enable=True):
         details_index = None
         for i in range(self.notebook.index("end")):
             tab_text = self.notebook.tab(i, "text")
@@ -331,10 +499,11 @@ class PhomodUI(tk.Tk):
         if details_index is not None:
             state = "normal" if enable else "disabled"
             self.notebook.tab(details_index, state=state)
+            app_logger.info(f"Details tab {'enabled' if enable else 'disabled'}.")
 
     def update_status(self, message):
-        """Update the text displayed in the status bar."""
         self.status_var.set(message)
+        app_logger.debug(f"Status updated: {message}")
 
 
 if __name__ == "__main__":
