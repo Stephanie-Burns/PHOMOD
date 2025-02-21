@@ -50,7 +50,8 @@ class PHOMODComboBox(ttk.Combobox, PHOMODWidgetMixin):
 
 
 class PHOMODButton(ttk.Button, PHOMODWidgetMixin):
-    def __init__(self, parent, text, command=None, help_text=None, *args, **kwargs):
+    def __init__(self, parent, text, command=None, help_text=None, padding=(10, 6), *args, **kwargs):
+        kwargs.setdefault("padding", padding)  # Set default if not provided
         super().__init__(parent, text=text, command=command, *args, **kwargs)
         self._bind_help_text(parent, help_text)
 

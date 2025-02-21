@@ -9,5 +9,5 @@ class BaseTab(ttk.Frame):
 
     def bind_help_message(self, widget, help_text=None):
         if help_text is not None:
-            widget.bind("<Enter>", lambda event: self.controller.update_status(help_text))
-        widget.bind("<Leave>", lambda event: self.controller.update_status("Ready"))
+            widget.bind("<Enter>", lambda event: self.controller.update_status_bar_text(help_text))
+        widget.bind("<Leave>", lambda event: self.controller.update_status_bar_text("Ready"))
