@@ -491,6 +491,7 @@ class SettingsTab(PHOMODFrame):
 # ----------------------------
 
 
+
 class DocumentationTab(PHOMODFrame):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
