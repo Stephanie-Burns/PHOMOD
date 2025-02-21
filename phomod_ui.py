@@ -1,65 +1,68 @@
+
+import random
+import tkinter as tk
+from ttkthemes import ThemedTk
 import logging
 import os
 import threading
 import random
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, font
 
-# Setup logging
-LOGS_DIR = "logs"
-os.makedirs(LOGS_DIR, exist_ok=True)
-
-def configure_logger(name, log_to_console=True, log_to_file=True, level=logging.INFO):
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.propagate = False
-
-    if logger.hasHandlers():
-        logger.handlers.clear()
-
-    formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)-8s | %(module)s - %(funcName)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    if log_to_console:
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-
-    if log_to_file:
-        log_file = os.path.join(LOGS_DIR, f"{name}.log")
-        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-
-    return logger
-
-app_logger = configure_logger('FOMODLogger')
-
-# Import your portable image viewer widget
 from prototype_image_manip import ImageViewerWidget
 
-# ttkthemes is now a project requirement.
-from ttkthemes import ThemedTk
+app_logger = logging.getLogger('FOMODLogger')
+
 
 # ----------------------------
 # ThemeManager: Centralize theme logic.
 # ----------------------------
+
+
 class ThemeManager:
     def __init__(self, root):
         self.root = root
+        self.style = ttk.Style(self.root)
+        self.separator = "----------"
+        self.themes_always_on_top = ["Default", "Random"]
 
     def get_themes(self):
+        """Retrieve a list of available themes."""
         return self.root.get_themes()
 
+    def get_theme(self):
+        """Retrieve the name of the currently active theme."""
+        return self.style.theme_use()
+
+    def get_theme_options(self):
+        """Retrieve organized theme options for display."""
+        themes = self.get_themes()
+        themes_alphabetical = [t for t in themes if t.lower() not in [s.lower() for s in self.themes_always_on_top]]
+        themes_alphabetical = sorted([t.capitalize() for t in themes_alphabetical])
+        return self.themes_always_on_top + [self.separator] + themes_alphabetical
+
     def apply_theme(self, theme):
+        """Apply the selected theme to the application and return the applied theme's name."""
+        if theme == self.separator:
+            print("Please select a valid theme.")
+            return None
+        if theme.lower() == "random":
+            all_themes = self.get_themes()
+            choices = [t for t in all_themes if t.lower() != "default"]
+            theme = random.choice(choices) if choices else "default"
         try:
-            self.root.set_theme(theme)
-            app_logger.info(f"Applied theme: {theme}")
+            self.root.set_theme(theme.lower())
+            print(f"Applied theme: {theme}")
+            self.root.update_idletasks()
+            return theme  # Return the name of the applied theme
         except tk.TclError as e:
-            app_logger.error(f"Error applying theme '{theme}': {e}")
-        self.root.update_idletasks()
+            print(f"Error applying theme '{theme}': {e}")
+            return None
+
+
+
+
+
 
 # ----------------------------
 # BaseTab: common functionality
@@ -73,6 +76,7 @@ class BaseTab(ttk.Frame):
         if help_text is not None:
             widget.bind("<Enter>", lambda event: self.controller.update_status(help_text))
         widget.bind("<Leave>", lambda event: self.controller.update_status("Ready"))
+
 
 # ----------------------------
 # ProjectTab: Handles project selection, recent projects, and mod tree view.
@@ -238,9 +242,9 @@ class XMLTab(BaseTab):
 # SettingsTab: Handles theme selection and additional settings.
 # ----------------------------
 class SettingsTab(BaseTab):
-    def __init__(self, parent, controller, *args, **kwargs):
+    def __init__(self, parent, controller, italic_font, *args, **kwargs):
         super().__init__(parent, controller, *args, **kwargs)
-        app_logger.info("Initializing SettingsTab")
+        self.italic_font = italic_font
         self.create_scrollable_widgets()
 
     def create_scrollable_widgets(self):
@@ -272,23 +276,18 @@ class SettingsTab(BaseTab):
 
     def create_widgets_in_inner(self):
         # ==== Theme Selection Section
-        themes = self.controller.get_themes()
-        themes_always_on_top = ["Default", "Random"]
-        themes_alphabetical = [t for t in themes if t.lower() not in [s.lower() for s in themes_always_on_top]]
-        themes_alphabetical = sorted([t.capitalize() for t in themes_alphabetical])
-        theme_separator = "----------"
-        theme_options = themes_always_on_top + [theme_separator] + themes_alphabetical
-
         theme_frame = ttk.Labelframe(self.inner_frame, text="Theme Selection")
         theme_frame.pack(fill=tk.X, padx=5, pady=5, expand=True)
 
+        theme_options = self.controller.theme_manager.get_theme_options()
         self.theme_var = tk.StringVar(value="Default")
         self.theme_menu = ttk.Combobox(theme_frame, textvariable=self.theme_var, values=theme_options, state="readonly")
         self.theme_menu.pack(fill=tk.X, padx=5, pady=5)
-        self.theme_menu.bind("<<ComboboxSelected>>", self.on_theme_selected)
+        self.theme_menu.bind("<<ComboboxSelected>>", self.apply_theme)
 
-        self.current_theme_label = ttk.Label(theme_frame, text="Current Theme: Default", font=("Arial", 10, "italic"))
-        self.current_theme_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        self.current_theme_label = ttk.Label(
+            theme_frame, text=f"Current Theme: {self.controller.theme_manager.get_theme()}", font=self.italic_font)
+        self.current_theme_label.pack(pady=5)
 
         self.bind_help_message(self.theme_menu, "Select a theme. 'Default' and 'Random' are at the top.")
         self.bind_help_message(self.current_theme_label, "Displays the currently active theme.")
@@ -331,7 +330,6 @@ class SettingsTab(BaseTab):
                                       state="readonly")
         self.lang_menu.pack(anchor="w", padx=5, pady=5)
 
-
         ttk.Button(lang_frame, text="Help Translate", command=self.ask_for_translation_help).pack(padx=5, pady=(5, 25))
 
         self.bind_help_message(self.lang_menu, "Select the language for the application interface.")
@@ -347,28 +345,22 @@ class SettingsTab(BaseTab):
         about_label.pack(expand=True, padx=5, pady=5)
         self.bind_help_message(about_frame, "About information.")
 
-        self.after(0, lambda: self.on_theme_selected(None))
+        self.after(0, lambda: self.apply_theme(None))
 
         app_logger.info("SettingsTab widgets created")
 
-    def on_theme_selected(self, event):
-        self.apply_theme()
+    def apply_theme(self, event=None):
+        """Applies the selected theme and updates the UI."""
+        selected_theme = self.theme_var.get()
 
-    def apply_theme(self):
-        theme = self.theme_var.get()
-        if theme == self.separator:
+        if selected_theme == self.controller.theme_manager.separator:
             self.controller.update_status("Please select a valid theme.")
             return
-        if theme.lower() == "random":
-            all_themes = self.controller.get_themes()
-            choices = [t for t in all_themes if t.lower() != "default"]
-            theme = random.choice(choices) if choices else "default"
-        display_theme = theme.capitalize()
-        self.controller.theme_manager.apply_theme(theme.lower())
-        self.current_theme_label.config(text=f"Current Theme: {display_theme}")
-        self.controller.update_status(f"Theme set to {display_theme}.")
 
-        app_logger.info(f"Theme applied: {display_theme}")
+        if applied_theme := self.controller.theme_manager.apply_theme(selected_theme):
+            display_theme = f"Random - {applied_theme.capitalize()}" if selected_theme.lower() == "random" else applied_theme.capitalize()
+            self.current_theme_label.config(text=f"Current Theme: {display_theme}")
+            self.controller.update_status(f"Theme set to {display_theme}.")
 
     def configure_log_rotation(self):
         self.controller.update_status("Log rotation configuration is not yet implemented.")
@@ -384,7 +376,6 @@ class SettingsTab(BaseTab):
         self.controller.update_status("Translation help requested.")
         app_logger.info("Translation help button pressed.")
         messagebox.showinfo("Translation Help", "Please visit our GitHub page to contribute translations.")
-
 
 
 # ----------------------------
@@ -412,6 +403,7 @@ class DocumentationTab(BaseTab):
         self.doc_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         app_logger.info("DocumentationTab widgets created")
 
+
 # ----------------------------
 # LogsTab: Displays application event logs.
 # ----------------------------
@@ -433,23 +425,42 @@ class LogsTab(BaseTab):
 class PhomodUI(ThemedTk):
     def __init__(self):
         super().__init__(theme="arc")
-        self.title("PHOMOD - Mod Organizer")
-        self.geometry("1000x618")
-        self.minsize(width=1000, height=550)
-        self.style = ttk.Style(self)
-        self.theme_manager = ThemeManager(self)
-        self.theme_manager.apply_theme("arc")  # Apply default theme
+        self.setup_ui()
+        app_logger.info("Application started.")
+
+    def setup_ui(self):
+        """Sets up the main UI components."""
+        self.configure_window()
+        self.create_style()
+        self.create_fonts()
         self.create_status_bar()
         self.create_notebook()
         self.create_tabs()
         self.notebook.bind("<<NotebookTabChanged>>", self.toggle_tab_emoji)
-        app_logger.info("Application started.")
+
+    def configure_window(self):
+        """Configures the main window properties."""
+        self.title("PHOMOD - Mod Organizer")
+        self.geometry("1000x618")
+        self.minsize(width=1000, height=550)
+
+    def create_style(self):
+        """Initializes and applies the default theme."""
+        self.style = ttk.Style(self)
+        self.theme_manager = ThemeManager(self)
+        self.theme_manager.apply_theme("arc")  # Apply default theme
+
+    def create_fonts(self):
+        """Initializes custom fonts."""
+        self.italic_font = font.Font(family="Helvetica", size=10, slant="italic")
 
     def create_notebook(self):
+        """Creates a notebook (tab container)."""
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
 
     def create_tabs(self):
+        """Initializes and adds all application tabs."""
         self.tab_config = {
             "project": {"default": "📦", "active": "🚚", "label": "Project", "class": ProjectTab},
             "details": {"default": "🖌️", "active": "🎨", "label": "Details", "class": DetailsTab},
@@ -457,22 +468,26 @@ class PhomodUI(ThemedTk):
             "logs": {"default": "🌲", "active": "🪵", "label": "Logs", "class": LogsTab},
             "settings": {"default": "⚙️", "active": "🔧", "label": "Settings", "class": SettingsTab},
             "docs": {"default": "📔", "active": "📖", "label": "Help", "class": DocumentationTab},
-
         }
         self.tabs = {}
         for key, config in self.tab_config.items():
-            tab_frame = config["class"](self.notebook, controller=self)
-            self.notebook.add(tab_frame, text=f" {config['default']}   {config['label']}"    )
+            if key == "settings":
+                tab_frame = config["class"](self.notebook, controller=self, italic_font=self.italic_font)
+            else:
+                tab_frame = config["class"](self.notebook, controller=self)
+            self.notebook.add(tab_frame, text=f" {config['default']}   {config['label']}")
             self.tabs[key] = tab_frame
             app_logger.info(f"Tab created: {config['label']}")
 
     def create_status_bar(self):
+        """Creates a status bar at the bottom of the window."""
         self.status_var = tk.StringVar(value="Ready")
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor="w")
         self.status_bar.pack(side="bottom", fill="x", padx=5, pady=5)
         self.style.configure("TLabel", background=self["background"])
 
     def toggle_tab_emoji(self, event):
+        """Changes the emoji of the active tab."""
         current_tab_id = self.notebook.index(self.notebook.select())
         current_text = self.notebook.tab(current_tab_id, "text")
         for key, config in self.tab_config.items():
@@ -490,6 +505,7 @@ class PhomodUI(ThemedTk):
         app_logger.info(f"Switched to tab: {current_text}")
 
     def toggle_details_tab(self, enable=True):
+        """Enables or disables the Details tab based on selection."""
         details_index = None
         for i in range(self.notebook.index("end")):
             tab_text = self.notebook.tab(i, "text")
@@ -502,10 +518,13 @@ class PhomodUI(ThemedTk):
             app_logger.info(f"Details tab {'enabled' if enable else 'disabled'}.")
 
     def update_status(self, message):
+        """Updates the status bar text."""
         self.status_var.set(message)
         app_logger.debug(f"Status updated: {message}")
 
-
 if __name__ == "__main__":
+    from logger_config import app_logger
+    app_logger.info("Application started")
+
     app = PhomodUI()
     app.mainloop()
