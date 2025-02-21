@@ -42,20 +42,53 @@ from ttkthemes import ThemedTk
 import tkinter as tk
 from tkinter import ttk
 
-
 class PHOMODComboBox(ttk.Combobox):
-    def __init__(self, parent, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
+    def __init__(self, parent, values, help_text=None, *args, **kwargs):
+        """
+        Custom ComboBox with optional help text and mouse scroll prevention.
 
-        # Override the mouse wheel event to prevent value change
+        :param parent: Parent Tkinter widget.
+        :param values: List of values for the ComboBox.
+        :param help_text: Optional help text to display on hover.
+        """
+        super().__init__(parent, values=values, *args, **kwargs)
+
+        # Prevent mouse scroll from changing values
         self.bind("<MouseWheel>", self._disable_mouse_wheel)  # Windows/macOS
-        self.bind("<Button-4>", self._disable_mouse_wheel)  # Linux (scroll up)
-        self.bind("<Button-5>", self._disable_mouse_wheel)  # Linux (scroll down)
+        self.bind("<Button-4>", self._disable_mouse_wheel)    # Linux (scroll up)
+        self.bind("<Button-5>", self._disable_mouse_wheel)    # Linux (scroll down)
+
+        # Automatically fetch help_manager from the controller if available
+        self._bind_help_text(parent, help_text)
 
     def _disable_mouse_wheel(self, event):
         """Prevents mouse scroll from changing the combobox value."""
         return "break"  # Stops the event from propagating
 
+    def _bind_help_text(self, parent, help_text):
+        """Automatically binds help text if the parent has a help manager."""
+        if help_text and hasattr(parent, "controller") and hasattr(parent.controller, "help_manager"):
+            parent.controller.help_manager.bind_help(self, help_text)
+
+
+class PHOMODLabel(ttk.Label):
+    def __init__(self, parent, text, help_text=None, *args, **kwargs):
+        """
+        Custom Label with optional help text binding.
+
+        :param parent: Parent Tkinter widget.
+        :param text: The label text.
+        :param help_text: Optional help text to display on hover.
+        """
+        super().__init__(parent, text=text, *args, **kwargs)
+
+        # Automatically fetch help_manager from the controller if available
+        self._bind_help_text(parent, help_text)
+
+    def _bind_help_text(self, parent, help_text):
+        """Automatically binds help text if the parent has a help manager."""
+        if help_text and hasattr(parent, "controller") and hasattr(parent.controller, "help_manager"):
+            parent.controller.help_manager.bind_help(self, help_text)
 
 # Example usage
 if __name__ == "__main__":

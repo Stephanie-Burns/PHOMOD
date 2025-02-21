@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, font
 
 from prototype_image_manip import ImageViewerWidget
+from phomod_widgets import PHOMODFrame, PHOMODLabel, PHOMODComboBox, PHOMODButton, PHOMODLabelFrame, PHOMODCheckbutton, PHOMODEntry
 
 app_logger = logging.getLogger('FOMODLogger')
 
@@ -60,30 +61,42 @@ class ThemeManager:
             return None
 
 
+class HelpTextManager:
+    """Centralized help text manager that binds tooltips to widgets and updates a status bar."""
 
+    def __init__(self, status_var: tk.StringVar):
+        """
+        Initializes the help text manager.
 
+        :param status_var: The StringVar used for the status bar.
+        """
+        self.status_var = status_var
 
+    def bind_help(self, widget, help_text: str):
+        """
+        Binds a help message to a widget. When hovered, it updates the status bar.
 
-# ----------------------------
-# BaseTab: common functionality
-# ----------------------------
-class BaseTab(ttk.Frame):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, *args, **kwargs)
-        self.controller = controller
+        :param widget: The Tkinter widget to bind the help text to.
+        :param help_text: The help text to display when hovering over the widget.
+        """
+        if help_text:
+            widget.bind("<Enter>", lambda event: self.update_status(help_text))
+            widget.bind("<Leave>", lambda event: self.update_status("Ready"))
+            app_logger.info(f"🔗 Help text bound: '{help_text}' to {widget.__class__.__name__}")
 
-    def bind_help_message(self, widget, help_text=None):
-        if help_text is not None:
-            widget.bind("<Enter>", lambda event: self.controller.update_status(help_text))
-        widget.bind("<Leave>", lambda event: self.controller.update_status("Ready"))
+    def update_status(self, message):
+        """Updates the status bar text."""
+        self.status_var.set(message)
+        app_logger.info(f"📢 Status updated: {message}")
+
 
 
 # ----------------------------
 # ProjectTab: Handles project selection, recent projects, and mod tree view.
 # ----------------------------
-class ProjectTab(BaseTab):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, controller, *args, **kwargs)
+class ProjectTab(PHOMODFrame):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         self.sidebar_visible = True
         app_logger.info("Initializing ProjectTab")
         self.create_widgets()
@@ -95,11 +108,19 @@ class ProjectTab(BaseTab):
     def create_top_bar(self):
         top_bar = ttk.Frame(self)
         top_bar.pack(fill=tk.X, padx=5, pady=5)
-        self.toggle_label = ttk.Label(top_bar, text="◀ Recent Projects",
-                                      cursor="hand2", font=("Arial", 10, "bold"), anchor="w")
+        self.toggle_label = PHOMODLabel(
+            top_bar,
+            text="◀ Recent Projects",
+            help_text="Click to collapse or expand the Recent Projects sidebar.",
+            cursor="hand2",
+            font=("Arial", 10, "bold"),
+            anchor="w"
+        )
+
+
         self.toggle_label.pack(side="left", fill=tk.X, expand=True, padx=(0, 10))
         self.toggle_label.bind("<Button-1>", self.toggle_sidebar)
-        self.bind_help_message(self.toggle_label, "Click to collapse or expand the Recent Projects sidebar.")
+        self.help_text = ""
 
         folder_frame = ttk.Frame(top_bar)
         folder_frame.pack(side="left", fill=tk.X, expand=True)
@@ -186,9 +207,9 @@ class ProjectTab(BaseTab):
 # ----------------------------
 # DetailsTab: Handles plugin details, including an image viewer and description editor.
 # ----------------------------
-class DetailsTab(BaseTab):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, controller, *args, **kwargs)
+class DetailsTab(PHOMODFrame):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         app_logger.info("Initializing DetailsTab")
         self.create_widgets()
 
@@ -214,9 +235,9 @@ class DetailsTab(BaseTab):
 # ----------------------------
 # XMLTab: Shows generated XML preview and export.
 # ----------------------------
-class XMLTab(BaseTab):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, controller, *args, **kwargs)
+class XMLTab(PHOMODFrame):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         app_logger.info("Initializing XMLTab")
         self.create_widgets()
 
@@ -241,26 +262,29 @@ class XMLTab(BaseTab):
 # ----------------------------
 # SettingsTab: Handles theme selection and additional settings.
 # ----------------------------
-class SettingsTab(BaseTab):
-    def __init__(self, parent, controller, italic_font, *args, **kwargs):
-        super().__init__(parent, controller, *args, **kwargs)
-        self.italic_font = italic_font
+class SettingsTab(PHOMODFrame):
+    def __init__(self, parent, controller, *args, **kwargs):
+        super().__init__(parent, controller=controller, *args, **kwargs)
+        self.controller = controller
         self.create_scrollable_widgets()
+        app_logger.info("SettingsTab initialized.")
+        # Manually test status update when the tab is created
+        self.controller.update_status("🛠️ Settings loaded successfully!")
 
     def create_scrollable_widgets(self):
-        # Create a container frame that holds a canvas and scrollbar.
-        container = ttk.Frame(self)
+        """Creates a scrollable frame for settings."""
+        container = PHOMODFrame(self)
         container.pack(fill=tk.BOTH, expand=True)
 
         self.canvas = tk.Canvas(container, borderwidth=0, highlightthickness=0)
-        vsb = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
+        vsb = tk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=vsb.set)
 
         vsb.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill=tk.BOTH, expand=True)
 
-        # Create a frame inside the canvas to hold all settings widgets.
-        self.inner_frame = ttk.Frame(self.canvas)
+        # Create an inner frame to hold all settings widgets
+        self.inner_frame = PHOMODFrame(self.canvas, controller=self.controller)  # Pass controller
         self.inner_window = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
 
         self.inner_frame.bind("<Configure>", self._on_frame_configure)
@@ -269,85 +293,164 @@ class SettingsTab(BaseTab):
         self.create_widgets_in_inner()
 
     def _on_frame_configure(self, event):
+        """Updates scroll region when the inner frame resizes."""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _on_canvas_configure(self, event):
+        """Ensures the inner window resizes correctly."""
         self.canvas.itemconfigure(self.inner_window, width=event.width)
 
     def create_widgets_in_inner(self):
-        # ==== Theme Selection Section
-        theme_frame = ttk.Labelframe(self.inner_frame, text="Theme Selection")
+        """Creates all settings widgets inside the scrollable frame."""
+
+        # ==== Theme Selection Section ====
+        theme_frame = PHOMODLabelFrame(
+            self.inner_frame,
+            text="Theme Selection",
+            help_text="Change the application's theme."
+        )
         theme_frame.pack(fill=tk.X, padx=5, pady=5, expand=True)
 
         theme_options = self.controller.theme_manager.get_theme_options()
         self.theme_var = tk.StringVar(value="Default")
-        self.theme_menu = ttk.Combobox(theme_frame, textvariable=self.theme_var, values=theme_options, state="readonly")
+
+        self.theme_menu = PHOMODComboBox(
+            theme_frame,
+            textvariable=self.theme_var,
+            values=theme_options,
+            state="readonly",
+            help_text="Select a theme for the application interface.",
+        )
         self.theme_menu.pack(fill=tk.X, padx=5, pady=5)
         self.theme_menu.bind("<<ComboboxSelected>>", self.apply_theme)
 
-        self.current_theme_label = ttk.Label(
-            theme_frame, text=f"Current Theme: {self.controller.theme_manager.get_theme()}", font=self.italic_font)
+        self.current_theme_label = PHOMODLabel(
+            theme_frame,
+            font=self.controller.fonts["italic"],
+            text=f"Current Theme: {self.controller.theme_manager.get_theme()}",
+            help_text="Displays the currently active theme."
+        )
         self.current_theme_label.pack(pady=5)
 
-        self.bind_help_message(self.theme_menu, "Select a theme. 'Default' and 'Random' are at the top.")
-        self.bind_help_message(self.current_theme_label, "Displays the currently active theme.")
+        app_logger.info("Theme selection section created.")
 
-        # ==== Logging Settings Section
-        log_frame = ttk.Labelframe(self.inner_frame, text="Logging Settings")
+        # ==== Logging Settings Section ====
+        log_frame = PHOMODLabelFrame(
+            self.inner_frame,
+            text="Logging Settings",
+            help_text="Adjust logging settings and levels."
+        )
         log_frame.pack(fill=tk.X, padx=5, pady=10, expand=True)
 
-        ttk.Label(log_frame, text="Log Level:").pack(anchor="w", padx=5, pady=(5, 0))
+        PHOMODLabel(
+            log_frame, text="Log Level:", help_text="Choose the level of detail for logs."
+        ).pack(anchor="w", padx=5, pady=(5, 0))
 
         self.log_level_var = tk.StringVar(value="INFO")
-        self.log_level_menu = ttk.Combobox(log_frame, textvariable=self.log_level_var,
-                                           values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                                           state="readonly")
+
+        self.log_level_menu = PHOMODComboBox(
+            log_frame,
+            textvariable=self.log_level_var,
+            state="readonly",
+            values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            help_text="Select the minimum log level for displayed logs.",
+        )
         self.log_level_menu.pack(fill=tk.X, padx=5, pady=(5, 25))
-        self.bind_help_message(self.log_level_menu, "Select the minimum log level to display.")
 
-        ttk.Button(log_frame, text="Configure Rotation", command=self.configure_log_rotation).pack(padx=5, pady=5)
+        PHOMODButton(
+            log_frame,
+            text="Configure Rotation",
+            help_text="Set up automatic log rotation.",
+            command=self.configure_log_rotation
+        ).pack(padx=5, pady=5)
 
-        # ==== Update Settings Section
-        update_frame = ttk.Labelframe(self.inner_frame, text="Update Settings")
+        app_logger.info("Logging settings section created.")
+
+        # ==== Update Settings Section ====
+        update_frame = PHOMODLabelFrame(
+            self.inner_frame,
+            text="Update Settings",
+            help_text="Configure automatic update checks."
+        )
         update_frame.pack(fill=tk.X, padx=5, pady=10, expand=True)
 
         self.auto_update_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(update_frame, text="Automatically check for updates",
-                        variable=self.auto_update_var).pack(anchor="w", padx=5, pady=5)
 
-        ttk.Button(update_frame, text="Check Now", command=self.check_for_updates).pack(padx=5, pady=5)
-        self.bind_help_message(update_frame, "Configure update settings for the application.")
+        PHOMODCheckbutton(
+            update_frame,
+            text="Automatically check for updates",
+            variable=self.auto_update_var,
+            help_text="Enable or disable automatic update checks."
+        ).pack(anchor="w", padx=5, pady=5)
 
-        # ==== Language Section
-        lang_frame = ttk.Labelframe(self.inner_frame, text="Language")
+        PHOMODButton(
+            update_frame,
+            text="Check Now",
+            help_text="Manually check for updates.",
+            command=self.check_for_updates
+        ).pack(padx=5, pady=5)
+
+        app_logger.info("Update settings section created.")
+
+        # ==== Language Section ====
+        lang_frame = PHOMODLabelFrame(
+            self.inner_frame,
+            text="Language",
+            help_text="Set the application language."
+        )
         lang_frame.pack(fill=tk.X, padx=5, pady=10, expand=True)
 
-        ttk.Label(lang_frame, text="Select Language:").pack(anchor="w", padx=5, pady=(5, 0))
+        PHOMODLabel(
+            lang_frame,
+            text="Select Language:",
+            help_text="Choose a language for the UI."
+        ).pack(anchor="w", padx=5, pady=(5, 0))
 
         self.lang_var = tk.StringVar(value="English")
-        self.lang_menu = ttk.Combobox(lang_frame, textvariable=self.lang_var,
-                                      values=["English", "Spanish", "French", "German"],
-                                      state="readonly")
+        self.lang_menu = PHOMODComboBox(
+            lang_frame,
+            textvariable=self.lang_var,
+            values=["English", "Spanish", "French", "German"],
+            state="readonly",
+            help_text="Select the language for the application."
+        )
         self.lang_menu.pack(anchor="w", padx=5, pady=5)
 
-        ttk.Button(lang_frame, text="Help Translate", command=self.ask_for_translation_help).pack(padx=5, pady=(5, 25))
+        PHOMODButton(
+            lang_frame,
+            text="Help Translate",
+            help_text="Assist in translating the app into other languages.",
+            command=self.ask_for_translation_help
+        ).pack(padx=5, pady=(5, 25))
 
-        self.bind_help_message(self.lang_menu, "Select the language for the application interface.")
+        app_logger.info("Language settings section created.")
 
-        # === About Section
-        about_frame = ttk.Labelframe(self.inner_frame, text="About")
+        # ==== About Section ====
+        about_frame = PHOMODLabelFrame(
+            self.inner_frame,
+            text="About",
+            help_text="View information about PHOMOD."
+        )
         about_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=10)
 
-        about_text = ("PHOMOD - Mod Organizer\nVersion 1.0\n\n"
-                      "Developed by Stephanie Burns\n"
-                      "Visit the GitHub repository for more info!")
-        about_label = ttk.Label(about_frame, text=about_text, justify="center", anchor="center")
-        about_label.pack(expand=True, padx=5, pady=5)
-        self.bind_help_message(about_frame, "About information.")
+        about_text = (
+            "PHOMOD - Mod Organizer\nVersion 1.0\n\n"
+            "Developed by Stephanie Burns\n"
+            "Visit the GitHub repository for more info!"
+        )
+
+        PHOMODLabel(
+            about_frame,
+            text=about_text,
+            help_text="Application version and credits.",
+            anchor="center",
+            justify="center"
+        ).pack(expand=True, padx=5, pady=5)
 
         self.after(0, lambda: self.apply_theme(None))
 
-        app_logger.info("SettingsTab widgets created")
+        app_logger.info("About section created.")
+        app_logger.info("SettingsTab widgets created successfully.")
 
     def apply_theme(self, event=None):
         """Applies the selected theme and updates the UI."""
@@ -357,22 +460,27 @@ class SettingsTab(BaseTab):
             self.controller.update_status("Please select a valid theme.")
             return
 
-        if applied_theme := self.controller.theme_manager.apply_theme(selected_theme):
+        applied_theme = self.controller.theme_manager.apply_theme(selected_theme)
+        if applied_theme:
             display_theme = f"Random - {applied_theme.capitalize()}" if selected_theme.lower() == "random" else applied_theme.capitalize()
             self.current_theme_label.config(text=f"Current Theme: {display_theme}")
             self.controller.update_status(f"Theme set to {display_theme}.")
+            app_logger.info(f"Theme applied: {display_theme}")
 
     def configure_log_rotation(self):
+        """Handles log rotation configuration."""
         self.controller.update_status("Log rotation configuration is not yet implemented.")
         app_logger.info("Configure log rotation button pressed.")
 
     def check_for_updates(self):
+        """Simulates checking for updates."""
         self.controller.update_status("Checking for updates...")
         app_logger.info("Checking for updates...")
         threading.Timer(2.0, lambda: self.controller.update_status("No updates available.")).start()
         app_logger.info("Update check completed.")
 
     def ask_for_translation_help(self):
+        """Opens a dialog for translation assistance."""
         self.controller.update_status("Translation help requested.")
         app_logger.info("Translation help button pressed.")
         messagebox.showinfo("Translation Help", "Please visit our GitHub page to contribute translations.")
@@ -381,9 +489,11 @@ class SettingsTab(BaseTab):
 # ----------------------------
 # DocumentationTab: In-app help and documentation.
 # ----------------------------
-class DocumentationTab(BaseTab):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, controller, *args, **kwargs)
+
+
+class DocumentationTab(PHOMODFrame):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         app_logger.info("Initializing DocumentationTab")
         self.create_widgets()
 
@@ -407,9 +517,9 @@ class DocumentationTab(BaseTab):
 # ----------------------------
 # LogsTab: Displays application event logs.
 # ----------------------------
-class LogsTab(BaseTab):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, controller, *args, **kwargs)
+class LogsTab(PHOMODFrame):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         app_logger.info("Initializing LogsTab")
         self.create_widgets()
 
@@ -451,8 +561,12 @@ class PhomodUI(ThemedTk):
         self.theme_manager.apply_theme("arc")  # Apply default theme
 
     def create_fonts(self):
-        """Initializes custom fonts."""
-        self.italic_font = font.Font(family="Helvetica", size=10, slant="italic")
+        """Initializes and stores custom fonts."""
+        self.fonts = {
+            "italic": font.Font(family="Helvetica", size=10, slant="italic"),
+            "bold": font.Font(family="Helvetica", size=10, weight="bold"),
+            "default": font.Font(family="Helvetica", size=10),
+        }
 
     def create_notebook(self):
         """Creates a notebook (tab container)."""
@@ -471,10 +585,7 @@ class PhomodUI(ThemedTk):
         }
         self.tabs = {}
         for key, config in self.tab_config.items():
-            if key == "settings":
-                tab_frame = config["class"](self.notebook, controller=self, italic_font=self.italic_font)
-            else:
-                tab_frame = config["class"](self.notebook, controller=self)
+            tab_frame = config["class"](self.notebook, controller=self)
             self.notebook.add(tab_frame, text=f" {config['default']}   {config['label']}")
             self.tabs[key] = tab_frame
             app_logger.info(f"Tab created: {config['label']}")
@@ -482,9 +593,9 @@ class PhomodUI(ThemedTk):
     def create_status_bar(self):
         """Creates a status bar at the bottom of the window."""
         self.status_var = tk.StringVar(value="Ready")
+        self.help_manager = HelpTextManager(self.status_var)  # ✅ Ensure HelpTextManager is initialized
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor="w")
         self.status_bar.pack(side="bottom", fill="x", padx=5, pady=5)
-        self.style.configure("TLabel", background=self["background"])
 
     def toggle_tab_emoji(self, event):
         """Changes the emoji of the active tab."""
