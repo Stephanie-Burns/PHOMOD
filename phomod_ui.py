@@ -1,15 +1,12 @@
 
+import logging
 import random
+import threading
 import tkinter as tk
 from ttkthemes import ThemedTk
-import logging
-import os
-import threading
-import random
-import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, font
 
-from prototype_image_manip import ImageViewerWidget
+from _prototypes.image_manipulation_prototype import ImageViewerWidget
 from phomod_widgets import PHOMODFrame, PHOMODLabel, PHOMODComboBox, PHOMODButton, PHOMODLabelFrame, PHOMODCheckbutton, PHOMODEntry
 
 app_logger = logging.getLogger('FOMODLogger')
@@ -289,7 +286,35 @@ class SettingsTab(PHOMODFrame):
         self.inner_frame.bind("<Configure>", self._on_frame_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
 
+        # Bind mouse wheel event
+        self.inner_frame.bind("<Enter>", lambda e: self._bind_mousewheel())
+        self.inner_frame.bind("<Leave>", lambda e: self._unbind_mousewheel())
+
         self.create_widgets_in_inner()
+
+    def _bind_mousewheel(self):
+        """Binds mouse wheel scrolling to the canvas and all widgets inside inner_frame."""
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)  # Linux (scroll up)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)  # Linux (scroll down)
+
+        # Bind mouse wheel event to all child widgets inside the frame
+        for widget in self.inner_frame.winfo_children():
+            widget.bind("<Enter>", lambda e: self._bind_mousewheel())
+            widget.bind("<Leave>", lambda e: self._unbind_mousewheel())
+
+    def _unbind_mousewheel(self):
+        """Unbinds the mouse wheel event when cursor leaves."""
+        self.canvas.unbind_all("<MouseWheel>")
+        self.canvas.unbind_all("<Button-4>")
+        self.canvas.unbind_all("<Button-5>")
+
+    def _on_mousewheel(self, event):
+        """Handles the mouse wheel scrolling."""
+        if event.num == 5 or event.delta < 0:  # Scroll down (Linux or Windows)
+            self.canvas.yview_scroll(1, "units")
+        elif event.num == 4 or event.delta > 0:  # Scroll up (Linux or Windows)
+            self.canvas.yview_scroll(-1, "units")
 
     def _on_frame_configure(self, event):
         """Updates scroll region when the inner frame resizes."""
