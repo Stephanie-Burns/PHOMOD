@@ -1,9 +1,10 @@
 
 import logging
+import re
 import tkinter as tk
 from tkinter import ttk
 
-from phomod_mixins import PHOMODHelpTextMixin, PHOMODContextMenuMixin
+from phomod_mixins import PHOMODHelpTextMixin, PHOMODContextMenuMixin, PHOMODScrollRedirectMixin
 
 app_logger = logging.getLogger('FOMODLogger')
 
@@ -27,7 +28,8 @@ class PHOMODLabelFrame(ttk.Labelframe, PHOMODHelpTextMixin):
         super().__init__(parent, **kwargs)
         self._bind_help_text(parent, help_text)
 
-    def _configure_label(self, kwargs, text, label_widget):
+    @staticmethod
+    def _configure_label(kwargs, text, label_widget):
         """Decide whether to use a label widget or the default text."""
         if label_widget:
             kwargs["labelwidget"] = label_widget
@@ -40,54 +42,38 @@ class PHOMODScrollableFrame(tk.Frame):
     def __init__(self, parent, controller=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.controller = controller
-        self._create_scrollable_container()
 
-    def _create_scrollable_container(self):
-        """Creates a scrollable frame with a vertical scrollbar."""
-        self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
-        vsb = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=vsb.set)
+        self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0, bg="white")
+        self.scroll_helper = _PHOMODAttachableScrollbar(self.canvas, attach_y=True)  # Handles the scrollbar
 
-        vsb.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill=tk.BOTH, expand=True)
 
-        self.inner_frame = PHOMODFrame(self.canvas, controller=self.controller)
+        # Interior Container
+        self.inner_frame = tk.Frame(self.canvas, bg="lightgray")
         self.inner_window = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
 
+        # Events
         self.inner_frame.bind("<Configure>", self._on_frame_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
-        self.inner_frame.bind("<Enter>", lambda e: self._bind_mousewheel())
-        self.inner_frame.bind("<Leave>", lambda e: self._unbind_mousewheel())
 
-    def _bind_mousewheel(self):
-        """Binds mouse wheel scrolling to the canvas and all widgets inside inner_frame."""
+        # Mouse wheel support
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        self.canvas.bind_all("<Button-4>", self._on_mousewheel)  # Linux (scroll up)
-        self.canvas.bind_all("<Button-5>", self._on_mousewheel)  # Linux (scroll down)
-        for widget in self.inner_frame.winfo_children():
-            widget.bind("<Enter>", lambda e: self._bind_mousewheel())
-            widget.bind("<Leave>", lambda e: self._unbind_mousewheel())
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)  # Linux scroll up
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)  # Linux scroll down
 
-    def _unbind_mousewheel(self):
-        """Unbinds the mouse wheel event when cursor leaves."""
-        self.canvas.unbind_all("<MouseWheel>")
-        self.canvas.unbind_all("<Button-4>")
-        self.canvas.unbind_all("<Button-5>")
-
-    def _on_mousewheel(self, event):
-        """Handles the mouse wheel scrolling."""
-        if event.num == 5 or event.delta < 0:  # Scroll down (Linux or Windows)
-            self.canvas.yview_scroll(1, "units")
-        elif event.num == 4 or event.delta > 0:  # Scroll up (Linux or Windows)
-            self.canvas.yview_scroll(-1, "units")
-
-    def _on_frame_configure(self, event):
-        """Updates scroll region when the inner frame resizes."""
+    def _on_frame_configure(self, event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _on_canvas_configure(self, event):
-        """Ensures the inner window resizes correctly."""
         self.canvas.itemconfigure(self.inner_window, width=event.width)
+
+    def _on_mousewheel(self, event):
+        """Handles the mouse wheel scrolling."""
+        delta = event.delta if event.delta else 120 if event.num == 4 else -120
+        norm = -1 if delta < 0 else 1
+        app_logger.debug(f"Canvas scrolling: norm delta = {norm}")
+        self.canvas.yview_scroll(-norm, "units")
+        return "break"
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -100,78 +86,66 @@ class PHOMODLabel(ttk.Label, PHOMODHelpTextMixin):
         self._bind_help_text(parent, help_text)
 
 
-class PHOMODEntry(ttk.Entry, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
+class PHOMODEntry(ttk.Entry, PHOMODHelpTextMixin, PHOMODContextMenuMixin, PHOMODScrollRedirectMixin):
     """An entry widget that redirects mouse scroll events to the parent scrollable frame."""
-
     def __init__(self, parent, textvariable=None, help_text=None, context_menu=None, **kwargs):
         super().__init__(parent, textvariable=textvariable, **kwargs)
         self._bind_help_text(parent, help_text)
         self._bind_context_menu(context_menu)
 
-        # Redirect mouse wheel events to the scrollable container
-        self.bind("<MouseWheel>", self._redirect_mouse_wheel)
-        self.bind("<Button-4>", self._redirect_mouse_wheel)  # Linux scroll up
-        self.bind("<Button-5>", self._redirect_mouse_wheel)  # Linux scroll down
-
-    def _redirect_mouse_wheel(self, event):
-        """Redirects the scroll event to the nearest scrollable parent (if any)."""
-        parent = self._find_scrollable_parent()
-        if parent:
-            parent.event_generate("<MouseWheel>", delta=event.delta)
-            parent.event_generate("<Button-4>" if event.num == 4 else "<Button-5>")
-        return "break"  # Prevents the entry itself from handling the scroll
-
-    def _find_scrollable_parent(self):
-        """Finds the nearest scrollable frame (PHOMODScrollableFrame)."""
-        parent = self.master
-        while parent:
-            if isinstance(parent, PHOMODScrollableFrame):
-                return parent.canvas
-            parent = parent.master
-        return None  # No scrollable parent found
-
 
 class PHOMODTextArea(tk.Text, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
-    """A multi-line text widget with help text and context menu integration."""
-    def __init__(self, parent, help_text=None, context_menu=None, **kwargs):
+    """A multi-line text widget with help text and context menu integration, now with optional scrollbars."""
+    def __init__(self, parent, help_text=None, context_menu=None, attach_x=False, attach_y=True, **kwargs):
         super().__init__(parent, **kwargs)
         self._bind_help_text(parent, help_text)
         self._bind_context_menu(context_menu)
+        self.scroll_helper = _PHOMODAttachableScrollbar(self, attach_x=attach_x, attach_y=attach_y)
+
+
+class PHOMODSyntaxTextArea(PHOMODTextArea):
+    """Enhanced Text Area with basic XML syntax highlighting."""
+
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.configure(font=("Courier", 12))  # Monospace for better readability
+        self._setup_tags()
+        self.bind("<KeyRelease>", self._highlight_syntax)  # Highlight on typing
+
+    def _setup_tags(self):
+        """Define text color styles for XML syntax."""
+        self.tag_configure("tag", foreground="blue")
+        self.tag_configure("attribute", foreground="darkred")
+        self.tag_configure("value", foreground="green")
+
+    def _highlight_syntax(self, event=None):
+        """Apply syntax highlighting dynamically."""
+        self.tag_remove("tag", "1.0", "end")
+        self.tag_remove("attribute", "1.0", "end")
+        self.tag_remove("value", "1.0", "end")
+
+        text = self.get("1.0", "end-1c")  # Get full text
+
+        # XML tag pattern: <tagname> </tagname>
+        tag_pattern = re.finditer(r"</?[\w:-]+.*?>", text)
+        for match in tag_pattern:
+            self.tag_add("tag", f"1.0+{match.start()}c", f"1.0+{match.end()}c")
+
+        # Attribute pattern: key="value"
+        attr_pattern = re.finditer(r'(\w+)=', text)
+        for match in attr_pattern:
+            self.tag_add("attribute", f"1.0+{match.start()}c", f"1.0+{match.end()}c")
+
+        # String values inside quotes: "value"
+        value_pattern = re.finditer(r'"[^"]*"', text)
+        for match in value_pattern:
+            self.tag_add("value", f"1.0+{match.start()}c", f"1.0+{match.end()}c")
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 #                                                                                                🎛 INTERACTIVE WIDGETS
 # ----------------------------------------------------------------------------------------------------------------------
-class PHOMODComboBox(ttk.Combobox, PHOMODHelpTextMixin):
-    """A combobox that redirects mouse scroll events to the parent scrollable frame."""
-
-    def __init__(self, parent, values, help_text=None, **kwargs):
-        super().__init__(parent, values=values, **kwargs)
-        self._bind_help_text(parent, help_text)
-
-        # Redirect mouse wheel events to the scrollable container
-        self.bind("<MouseWheel>", self._redirect_mouse_wheel)
-        self.bind("<Button-4>", self._redirect_mouse_wheel)  # Linux scroll up
-        self.bind("<Button-5>", self._redirect_mouse_wheel)  # Linux scroll down
-
-    def _redirect_mouse_wheel(self, event):
-        """Redirects the scroll event to the nearest scrollable parent (if any)."""
-        parent = self._find_scrollable_parent()
-        if parent:
-            parent.event_generate("<MouseWheel>", delta=event.delta)
-            parent.event_generate("<Button-4>" if event.num == 4 else "<Button-5>")
-        return "break"  # Prevents the combobox itself from scrolling
-
-    def _find_scrollable_parent(self):
-        """Finds the nearest scrollable frame (PHOMODScrollableFrame)."""
-        parent = self.master
-        while parent:
-            if isinstance(parent, PHOMODScrollableFrame):
-                return parent.canvas
-            parent = parent.master
-        return None  # No scrollable parent found
-
-
 class PHOMODButton(ttk.Button, PHOMODHelpTextMixin):
     """A button with customizable padding and help text integration."""
     def __init__(self, parent, text, command=None, help_text=None, padding=(10, 6), **kwargs):
@@ -185,3 +159,111 @@ class PHOMODCheckbutton(ttk.Checkbutton, PHOMODHelpTextMixin):
     def __init__(self, parent, text, variable, help_text=None, **kwargs):
         super().__init__(parent, text=text, variable=variable, **kwargs)
         self._bind_help_text(parent, help_text)
+
+
+class PHOMODComboBox(ttk.Combobox, PHOMODHelpTextMixin, PHOMODScrollRedirectMixin):
+    """A combobox that redirects mouse scroll events to the parent scrollable frame."""
+    def __init__(self, parent, values, state="readonly", help_text=None, **kwargs):
+        super().__init__(parent, values=values, state=state, **kwargs)
+        self._bind_help_text(parent, help_text)
+
+        self.unbind_class("TCombobox", "<MouseWheel>")
+        self.bind("<MouseWheel>", self._redirect_mouse_wheel, add="+")
+        self.bind("<Button-4>", self._redirect_mouse_wheel, add="+")
+        self.bind("<Button-5>", self._redirect_mouse_wheel, add="+")
+
+    # Optionally, override click behavior if needed:
+    def _open_dropdown(self, event):
+        # Let the dropdown open normally.
+        self.event_generate("<Down>")
+
+    def set_state(self, state: str):
+        """Dynamically updates the combobox state."""
+        self.config(state=state)
+
+
+class PHOMODListbox(tk.Listbox, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
+    """A listbox widget with a built-in scrollbar, padding, and optional help text/context menu."""
+
+    def __init__(self, parent, height=10, help_text=None, context_menu=None, attach_x=False, attach_y=True, **kwargs):
+        super().__init__(parent, height=height, **kwargs)
+
+        self.scroll_helper = _PHOMODAttachableScrollbar(self, attach_x=attach_x, attach_y=attach_y)
+
+        self._bind_help_text(parent, help_text)
+        self._bind_context_menu(context_menu)
+
+    def add_item(self, item: str):
+        """Adds an item to the listbox."""
+        self.insert(tk.END, item)
+
+    def remove_selected(self):
+        """Removes the selected item(s) from the listbox."""
+        selected_indices = self.curselection()
+        for index in reversed(selected_indices):  # Reverse order to avoid index shift issues
+            self.delete(index)
+
+    def clear_items(self):
+        """Removes all items from the listbox."""
+        self.delete(0, tk.END)
+
+
+class PHOMODTreeview(ttk.Treeview, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
+    """A treeview widget with a built-in scrollbar, padded properly, and optional help text/context menu."""
+
+    def __init__(self, parent, columns, help_text=None, context_menu=None, attach_x=False, attach_y=True, **kwargs):
+        kwargs.setdefault("show", "tree headings")  # Only set `show` if not already provided
+        super().__init__(parent, columns=columns, **kwargs)
+
+        # Attach scrollbars dynamically
+        self.scroll_helper = _PHOMODAttachableScrollbar(self, attach_x=attach_x, attach_y=attach_y, pady=5)
+
+        # Properly inherit from mixins (automatic binding)
+        self._bind_help_text(parent, help_text)
+        self._bind_context_menu(context_menu)
+
+    def add_item(self, parent, text, values=None):
+        """Adds an item to the tree under the specified parent node."""
+        return self.insert(parent, tk.END, text=text, values=values or [])
+
+    def remove_selected(self):
+        """Removes the selected item(s) from the tree."""
+        selected_items = self.selection()
+        for item in selected_items:
+            self.delete(item)
+
+    def clear_items(self):
+        """Removes all items from the tree."""
+        for item in self.get_children():
+            self.delete(item)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+#                                                                                                            👀 Private
+# ----------------------------------------------------------------------------------------------------------------------
+class _PHOMODAttachableScrollbar:
+    """Helper class to attach a scrollbar to any widget without modifying its behavior."""
+
+    def __init__(self, widget, attach_x=False, attach_y=True, **kwargs):
+        self.widget = widget
+        self.parent = widget.master
+
+        if attach_y:
+            self.scrollbar_y = tk.Scrollbar(self.parent, orient="vertical", command=self.widget.yview)
+            self.widget.configure(yscrollcommand=self.scrollbar_y.set)
+            self.scrollbar_y.pack(side="right", fill="y", **kwargs)  # Attach scrollbar to the right
+
+        if attach_x:
+            self.scrollbar_x = tk.Scrollbar(self.parent, orient="horizontal", command=self.widget.xview, **kwargs)
+            self.widget.configure(xscrollcommand=self.scrollbar_x.set,  **kwargs)
+            self.scrollbar_x.pack(side="bottom", fill="x")  # Attach scrollbar at bottom
+
+    def remove(self):
+        """Removes the scrollbar from the widget."""
+        if hasattr(self, "scrollbar_y"):
+            self.scrollbar_y.pack_forget()
+            self.widget.configure(yscrollcommand="")
+
+        if hasattr(self, "scrollbar_x"):
+            self.scrollbar_x.pack_forget()
+            self.widget.configure(xscrollcommand="")

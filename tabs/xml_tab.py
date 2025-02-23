@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 
 from phomod_context_menu import PHOMODContextMenu
-from phomod_widgets import PHOMODFrame, PHOMODLabel, PHOMODTextArea, PHOMODButton
+from phomod_widgets import PHOMODFrame, PHOMODLabel, PHOMODTextArea, PHOMODButton, PHOMODSyntaxTextArea
 
 app_logger = logging.getLogger('FOMODLogger')
 
@@ -18,8 +18,11 @@ class XMLTab(PHOMODFrame):
     def create_widgets(self):
         PHOMODLabel(self, text="Generated FOMOD XML:").pack(anchor="w", padx=5, pady=5)
 
-        self.xml_preview = PHOMODTextArea(self, context_menu=PHOMODContextMenu(self), height=20)
-        self.xml_preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        text_frame = PHOMODFrame(self)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.xml_preview = PHOMODSyntaxTextArea(text_frame, height=20, attach_y=True)
+        self.xml_preview.pack(fill=tk.BOTH, expand=True)
 
         self.generate_button = PHOMODButton(self, text="Generate XML", command=self.start_generate_xml)
         self.generate_button.pack(pady=5, padx=5)
@@ -31,6 +34,13 @@ class XMLTab(PHOMODFrame):
         threading.Thread(target=self.generate_xml, daemon=True).start()
 
     def generate_xml(self):
+        sample_xml = """<config>
+    <mod name="Example">
+        <author>John Doe</author>
+        <version>1.0</version>
+    </mod>
+</config>"""
         self.xml_preview.delete("1.0", tk.END)
-        self.xml_preview.insert("1.0", "<config>\n  <!-- XML Content Here -->\n</config>")
+        self.xml_preview.insert("1.0", sample_xml)
+        self.xml_preview._highlight_syntax()  # Manually trigger highlighting
         app_logger.info("XML generated")

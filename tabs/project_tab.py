@@ -1,213 +1,286 @@
+
 import logging
 import tkinter as tk
 from tkinter import ttk, filedialog
 
-from phomod_widgets import PHOMODFrame, PHOMODLabel
+from phomod_widgets import (
+    PHOMODFrame, PHOMODLabel, PHOMODTextArea, PHOMODLabelFrame,
+    PHOMODEntry, PHOMODButton, PHOMODListbox, PHOMODTreeview
+)
 from _prototypes.image_manipulation_prototype import ImageViewerWidget
 
 app_logger = logging.getLogger('FOMODLogger')
 
 
-class ProjectTab(PHOMODFrame):
-    def __init__(self, parent, controller, *args, **kwargs):
-        super().__init__(parent, controller=controller, *args, **kwargs)
-        self.controller = controller
-        self.active_sidebar = None  # No sidebar is open by default
-        app_logger.info("Initializing ProjectTab")
-        self.create_widgets()
+# ----------------------------------------------------------------------------------------------------------------------
+#                                                                                                    🎚️ Sidebar Toggles
+# ----------------------------------------------------------------------------------------------------------------------
+class SidebarToggleBar(PHOMODFrame):
+    """Interactive widget for toggling sidebars."""
 
-    def create_widgets(self):
-        self.create_sidebar_buttons()
-        ttk.Separator(self, orient="horizontal").pack(fill=tk.X, padx=5, pady=3)  # Divider below buttons
-        self.create_paned_area()
+    def __init__(self, parent, toggle_callback, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.toggle_callback = toggle_callback
+        self._create_widgets()
 
-    def create_sidebar_buttons(self):
-        """Creates the sidebar toggle buttons with spacing."""
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill=tk.X, padx=5, pady=(8, 5))  # Extra padding on top
-
-        # 📂 Toggle for Project Manager
-        self.toggle_sidebar_label = PHOMODLabel(
-            button_frame,
-            text="▶ Project Manager",
-            help_text="Click to show/hide the Project Manager.",
+    def _create_widgets(self):
+        self.loader_toggle = PHOMODLabel(
+            self,
+            text="▶ Project Loader",
+            help_text="Toggle the Project Loader sidebar.",
             cursor="hand2",
             font=("Arial", 10, "bold"),
             anchor="w"
         )
-        self.toggle_sidebar_label.pack(fill=tk.X, padx=5, pady=(0, 2))  # Stacked vertically
-        self.toggle_sidebar_label.bind("<Button-1>", lambda e: self.toggle_sidebar("sidebar"))
+        self.loader_toggle.pack(fill=tk.X, padx=5, pady=(0, 2))
+        self.loader_toggle.bind("<Button-1>", lambda e: self.toggle_callback("loader"))
 
-        # 📝 Toggle for Plugin Details
-        self.toggle_details_label = PHOMODLabel(
-            button_frame,
+        self.details_toggle = PHOMODLabel(
+            self,
             text="▶ Plugin Details",
-            help_text="Click to show/hide Plugin Details.",
+            help_text="Toggle the Plugin Details sidebar.",
             cursor="hand2",
             font=("Arial", 10, "bold"),
             anchor="w"
         )
-        self.toggle_details_label.pack(fill=tk.X, padx=5, pady=(2, 0))
-        self.toggle_details_label.bind("<Button-1>", lambda e: self.toggle_sidebar("details"))
+        self.details_toggle.pack(fill=tk.X, padx=5, pady=(2, 0))
+        self.details_toggle.bind("<Button-1>", lambda e: self.toggle_callback("details"))
 
-    def create_paned_area(self):
-        """Creates the main editor area with optional sidebars."""
-        self.paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        self.paned.pack(fill=tk.BOTH, expand=True)
+    def update_toggle_text(self, sidebar, is_open):
+        """Updates toggle labels based on sidebar state."""
+        text_map = {
+            "loader": "◀ Project Loader" if is_open else "▶ Project Loader",
+            "details": "◀ Plugin Details" if is_open else "▶ Plugin Details",
+        }
+        if sidebar in text_map:
+            getattr(self, f"{sidebar}_toggle").config(text=text_map[sidebar])
 
-        self.sidebar = ttk.Frame(self.paned, width=250)  # No border
-        self.details_sidebar = ttk.Frame(self.paned, width=250)  # No border
 
-        self.create_project_manager_sidebar()
-        self.create_main_area()
-        self.create_plugin_details_sidebar()
+# ----------------------------------------------------------------------------------------------------------------------
+#                                                                                             📂 Project Loader Sidebar
+# ----------------------------------------------------------------------------------------------------------------------
+class ProjectLoaderSidebar(PHOMODFrame):
+    """Sidebar for selecting a project folder and displaying recent projects."""
 
-        # Start with no sidebars visible
-        self.paned.add(self.main_frame, weight=3)
+    def __init__(self, parent, load_callback, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.load_callback = load_callback
+        self._create_widgets()
 
-    def create_project_manager_sidebar(self):
-        """Sidebar for managing projects (includes recent projects + directory picker)."""
-        frame = ttk.Frame(self.sidebar)
-        frame.pack(fill=tk.BOTH, expand=True, padx=(5, 0), pady=5)
+    def _create_widgets(self):
+        """Creates the project loader UI components."""
+        self.project_dir_var = tk.StringVar()
 
-        # 📂 Directory Picker
-        ttk.Label(frame, text="Project Directory:").pack(anchor="w", padx=5, pady=2)
+        frame = PHOMODFrame(self)
+        frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        self.project_entry = ttk.Entry(frame, width=40)
+        PHOMODLabel(frame, text="Project Directory:").pack(anchor="w", padx=5, pady=2)
+
+        self.project_entry = PHOMODEntry(
+            frame, width=40, textvariable=self.project_dir_var, help_text="Select the directory for your project."
+        )
         self.project_entry.pack(fill=tk.X, padx=5, pady=2)
 
-        # Move Browse & Load buttons **below** the entry field
-        button_frame = ttk.Frame(frame)
-        button_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+        btn_frame = PHOMODFrame(frame)
+        btn_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
 
-        ttk.Button(button_frame, text="Browse", command=self.select_folder).pack(side="left", expand=True, fill=tk.X,
-                                                                                 padx=2)
-        ttk.Button(button_frame, text="Load", command=self.load_project).pack(side="left", expand=True, fill=tk.X,
-                                                                              padx=2)
+        PHOMODButton(
+            btn_frame, text="Browse", command=self.select_folder
+        ).pack(side="left", expand=True, fill=tk.X, padx=2)
+        PHOMODButton(
+            btn_frame, text="Load", command=self._load_project
+        ).pack(side="left", expand=True, fill=tk.X, padx=2)
 
         ttk.Separator(frame, orient="horizontal").pack(fill=tk.X, padx=5, pady=5)
 
-        # 📋 Recent Projects List
-        ttk.Label(frame, text="Recent Projects:").pack(anchor="w", padx=5, pady=2)
+        PHOMODLabel(frame, text="Recent Projects:").pack(anchor="w", padx=5, pady=2)
 
-        listbox_frame = ttk.Frame(frame)
+        listbox_frame = PHOMODFrame(frame)
         listbox_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
 
-        self.recent_projects = tk.Listbox(listbox_frame, height=10)
-        self.recent_projects.pack(side="left", fill=tk.BOTH, expand=True)
-
-        list_scroll = ttk.Scrollbar(listbox_frame, orient="vertical", command=self.recent_projects.yview)
-        list_scroll.pack(side="right", fill="y")
-        self.recent_projects.configure(yscrollcommand=list_scroll.set)
-
-        self.recent_projects.bind("<Double-Button-1>", self.load_recent_project)
-
-    def create_main_area(self):
-        """Main project area with mod tree structure."""
-        self.main_frame = ttk.Frame(self.paned)
-
-        tree_frame = ttk.Frame(self.main_frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        self.tree = ttk.Treeview(
-            tree_frame,
-            columns=("Type", "Install Type", "Desc?", "Img?"),
-            show="tree headings"
+        self.recent_projects = PHOMODListbox(
+            listbox_frame, attach_y=True, height=10, help_text="Double-click to load a recent project."
         )
-        self.tree.heading("#0", text="Structure")
-        self.tree.heading("Type", text="Category")
-        self.tree.heading("Install Type", text="Install Type")
-        self.tree.heading("Desc?", text="📝")
-        self.tree.heading("Img?", text="🖼️")
+        self.recent_projects.pack(side="left", fill=tk.BOTH, expand=True)
+        self.recent_projects.bind("<Double-Button-1>", self._load_recent_project)
 
-        self.tree.column("#0", minwidth=100)
-        self.tree.column("Type", minwidth=100)
-        self.tree.column("Install Type", width=130, stretch=False)
-        self.tree.column("Desc?", width=35, stretch=False)
-        self.tree.column("Img?", width=35, stretch=False)
+    def select_folder(self):
+        """Opens a folder dialog and loads the selected project."""
+        folder = filedialog.askdirectory()
+        if folder:
+            self.project_dir_var.set(folder)
+            self._load_project()
 
-        self.tree.pack(side="left", fill=tk.BOTH, expand=True, padx=(0,0), pady=(5,5))
-        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
-        tree_scroll.pack(side="right", fill="y", padx=(0,5), pady=(5,5))
-        self.tree.configure(yscrollcommand=tree_scroll.set)
+    def _load_project(self):
+        """Loads the selected project path."""
+        path = self.project_dir_var.get()
+        if path:
+            app_logger.info(f"📂 Loading project: {path}")
+            self.load_callback(path)
 
-        self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+    def _load_recent_project(self, event):
+        """Loads a project from the recent projects list."""
+        selection = self.recent_projects.curselection()
+        if selection:
+            project = self.recent_projects.get(selection)
+            self.project_dir_var.set(project)
+            self._load_project()
 
-    def create_plugin_details_sidebar(self):
-        """Sidebar for plugin details with an adjustable divider (cleaner borders)."""
-        self.details_paned = ttk.PanedWindow(self.details_sidebar, orient=tk.VERTICAL)
-        self.details_paned.pack(fill=tk.BOTH, expand=True, padx=(10, 5), pady=(0, 11))  # ⬅️ Bottom padding
 
-        # 📸 Plugin Image Section
-        image_frame = ttk.LabelFrame(self.details_paned, text="Plugin Image")
+# ----------------------------------------------------------------------------------------------------------------------
+#                                                                                             🔍 Plugin Details Sidebar
+# ----------------------------------------------------------------------------------------------------------------------
+class PluginDetailsSidebar(PHOMODFrame):
+    """Sidebar displaying plugin image and description."""
+
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self._create_widgets()
+
+    def _create_widgets(self):
+        """Creates UI elements for plugin details."""
+        self.details_paned = ttk.PanedWindow(self, orient=tk.VERTICAL)
+        self.details_paned.pack(fill=tk.BOTH, expand=True, padx=(10, 5), pady=(0, 11))
+
+        image_frame = PHOMODLabelFrame(self.details_paned, text="Plugin Image")
         self.details_paned.add(image_frame, weight=1)
+
         self.image_viewer = ImageViewerWidget(image_frame)
         self.image_viewer.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
-        # 📝 Description Section
-        desc_frame = ttk.LabelFrame(self.details_paned, text="Description", padding=0)
+        desc_frame = PHOMODLabelFrame(self.details_paned, text="Description")
         self.details_paned.add(desc_frame, weight=1)
 
-        # Textbox + Scrollbar Frame
-        text_frame = ttk.Frame(desc_frame)
-        text_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 0))
+        container = PHOMODFrame(desc_frame)
+        container.pack(fill=tk.BOTH, expand=True, padx=5, pady=0)
 
-        self.description_text = tk.Text(text_frame, height=4, width=30, wrap=tk.WORD)
-        text_scroll = ttk.Scrollbar(text_frame, orient="vertical", command=self.description_text.yview)
-        self.description_text.configure(yscrollcommand=text_scroll.set)
-
+        self.description_text = PHOMODTextArea(
+            container, attach_y=True, height=4, width=37, wrap=tk.WORD,
+            help_text="Enter plugin details here."
+        )
         self.description_text.pack(side="left", fill=tk.BOTH, expand=True)
-        text_scroll.pack(side="right", fill="y")  # Scrollbar on the right
 
-    def select_folder(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.project_entry.delete(0, tk.END)
-            self.project_entry.insert(0, folder)
-            self.load_project()
 
-    def load_project(self):
-        path = self.project_entry.get()
-        if path:
-            app_logger.info(f"Loading project: {path}")
+# ----------------------------------------------------------------------------------------------------------------------
+#                                                                                                 🏗️ ModStructureEditor
+# ----------------------------------------------------------------------------------------------------------------------
+class ModStructureEditor(PHOMODFrame):
+    """Main area where the mod/directory structure is displayed and edited."""
 
-    def load_recent_project(self, event):
-        selected_index = self.recent_projects.curselection()
-        if selected_index:
-            self.project_entry.delete(0, tk.END)
-            self.project_entry.insert(0, self.recent_projects.get(selected_index))
-            self.load_project()
+    def __init__(self, parent, tree_select_callback, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.tree_select_callback = tree_select_callback
+        self._create_widgets()
 
-    def toggle_sidebar(self, sidebar):
-        """Ensures only one sidebar is open at a time or closes both."""
-        if sidebar == self.active_sidebar:
-            self.paned.forget(self.sidebar if sidebar == "sidebar" else self.details_sidebar)
-            self.toggle_sidebar_label.config(text="▶ Project Manager")
-            self.toggle_details_label.config(text="▶ Plugin Details")
-            self.active_sidebar = None  # No sidebar active
-        else:
-            # Close any currently open sidebar first
+    def _create_widgets(self):
+        container = PHOMODFrame(self)
+        container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.mod_tree = PHOMODTreeview(
+            container,
+            columns=("Type", "Install Type", "Desc", "Img"),
+            show="tree headings",
+            attach_y=True
+        )
+        self.mod_tree.heading("#0", text="Structure")
+        self.mod_tree.heading("Type", text="Category")
+        self.mod_tree.heading("Install Type", text="Install Type")
+        self.mod_tree.heading("Desc", text="📝")
+        self.mod_tree.heading("Img", text="🖼️")
+        self.mod_tree.column("#0", minwidth=100)
+        self.mod_tree.column("Type", minwidth=100)
+        self.mod_tree.column("Install Type", width=130, stretch=False)
+        self.mod_tree.column("Desc", width=35, stretch=False)
+        self.mod_tree.column("Img", width=35, stretch=False)
+
+        self.mod_tree.pack(side="left", fill=tk.BOTH, expand=True, padx=0, pady=5)
+        self.mod_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+
+    def _on_tree_select(self, event):
+        selection = self.mod_tree.selection()
+        app_logger.info(f"Tree selection changed: {selection}")
+        self.tree_select_callback(selection)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+#                                                                                                        📦 Project Tab
+# ----------------------------------------------------------------------------------------------------------------------
+class ProjectTab(PHOMODFrame):
+    """
+    ProjectTab is the main interface where users load a project, view and edit the mod structure,
+    and check plugin details. It assembles the SidebarToggleBar, ProjectLoaderSidebar,
+    ModStructureEditor, and PluginDetailsSidebar.
+    """
+
+    def __init__(self, parent, controller, *args, **kwargs):
+        super().__init__(parent, controller=controller, *args, **kwargs)
+        self.controller = controller
+        self.active_sidebar = None  # Tracks the currently open sidebar ('loader', 'details', or None)
+
+        self._create_widgets()
+        app_logger.info("🚀 ProjectTab initialized.")
+
+    def _create_widgets(self):
+        """Create UI components and structure."""
+        # Sidebar Toggle Bar
+        self.toggle_bar = SidebarToggleBar(self, self.toggle_sidebar)
+        self.toggle_bar.pack(fill=tk.X, padx=5, pady=(8, 5))
+        ttk.Separator(self, orient="horizontal").pack(fill=tk.X, padx=5, pady=3)
+
+        # Main Layout
+        self.paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        self.paned.pack(fill=tk.BOTH, expand=True)
+
+        # Sidebar Components
+        self.project_loader = ProjectLoaderSidebar(self, self.load_project)
+        self.mod_editor = ModStructureEditor(self, self.on_tree_select)
+        self.plugin_details = PluginDetailsSidebar(self)
+
+        # Initially, only show the mod structure editor.
+        self.paned.add(self.mod_editor, weight=3)
+
+    def load_project(self, path):
+        """Handles project loading."""
+        app_logger.info(f"📦 Project loaded: {path}")
+        # TODO: Implement actual project loading logic.
+
+    def on_tree_select(self, selection):
+        """Handles tree selection updates."""
+        # Toggle Plugin Details sidebar when a selection exists.
+        self.toggle_sidebar("details" if selection else None, force_open=True)
+
+    def toggle_sidebar(self, sidebar_key, force_open=False):
+        """
+        Toggles sidebar visibility.
+
+        :param sidebar_key: 'loader' for Project Loader, 'details' for Plugin Details, or None to close sidebars.
+        :param force_open: If True, forces the sidebar to open even if it's already active.
+        """
+        # If closing the active sidebar, remove it and reset tracking.
+        if sidebar_key is None or (sidebar_key == self.active_sidebar and not force_open):
             if self.active_sidebar:
-                self.paned.forget(self.sidebar if self.active_sidebar == "sidebar" else self.details_sidebar)
+                self._remove_sidebar(self.active_sidebar)
+                self.active_sidebar = None
+            return
 
-            # Open the requested sidebar
-            if sidebar == "sidebar":
-                self.paned.insert(0, self.sidebar, weight=1)
-                self.toggle_sidebar_label.config(text="◀ Project Manager")
-                self.toggle_details_label.config(text="▶ Plugin Details")
-            else:
-                self.paned.insert(0, self.details_sidebar, weight=1)
-                self.toggle_sidebar_label.config(text="▶ Project Manager")
-                self.toggle_details_label.config(text="◀ Plugin Details")
+        # Always remove the currently active sidebar before adding a new one.
+        if self.active_sidebar:
+            self._remove_sidebar(self.active_sidebar)
 
-            self.active_sidebar = sidebar
+        # Add the requested sidebar.
+        self._add_sidebar(sidebar_key)
 
-    def on_tree_select(self, event):
-        """Handles selection changes in the tree view."""
-        selected = self.tree.selection()
-        has_selection = bool(selected)
+    def _remove_sidebar(self, sidebar_key):
+        """Handles sidebar removal logic."""
+        sidebar = self.project_loader if sidebar_key == "loader" else self.plugin_details
+        self.paned.forget(sidebar)
+        self.toggle_bar.update_toggle_text(sidebar_key, False)
+        app_logger.info(f"Closed sidebar: {sidebar_key}")
 
-        # Toggle Plugin Details based on selection
-        self.toggle_sidebar("details" if has_selection else None)
-
-        app_logger.info(f"Tree selection changed: {selected}")
+    def _add_sidebar(self, sidebar_key):
+        """Handles sidebar addition logic."""
+        sidebar = self.project_loader if sidebar_key == "loader" else self.plugin_details
+        self.paned.insert(0, sidebar, weight=1)
+        self.toggle_bar.update_toggle_text(sidebar_key, True)
+        self.active_sidebar = sidebar_key
+        app_logger.info(f"Opened sidebar: {sidebar_key}")
