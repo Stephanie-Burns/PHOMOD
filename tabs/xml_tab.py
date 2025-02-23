@@ -18,7 +18,7 @@ class XMLTab(PHOMODFrame):
     def create_widgets(self):
         PHOMODLabel(self, text="Generated FOMOD XML:").pack(anchor="w", padx=5, pady=5)
 
-        self.xml_preview = PHOMODTextArea(self, context_menu=PHOMODContextMenu(self), wrap=tk.WORD, height=20)
+        self.xml_preview = PHOMODTextArea(self, context_menu=PHOMODContextMenu(self), height=20)
         self.xml_preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         self.generate_button = PHOMODButton(self, text="Generate XML", command=self.start_generate_xml)

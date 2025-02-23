@@ -41,7 +41,7 @@ class LogsTab(PHOMODFrame):
         self.flush_buffered_logs()  # Flush early logs
 
     def create_widgets(self):
-        ttk.Label(self, text="Event Logs:").pack(anchor="w", padx=5, pady=5)
+        # ttk.Label(self, text="Event Logs:").pack(anchor="w", padx=5, pady=5)
 
         # Create scrollable text frame
         text_frame = tk.Frame(self)

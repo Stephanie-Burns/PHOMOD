@@ -17,9 +17,7 @@ from tabs import (
 app_logger = logging.getLogger('FOMODLogger')
 
 
-# ----------------------------
-# ThemeManager: Centralize theme logic.
-# ----------------------------
+
 class ThemeManager:
     def __init__(self, root):
         self.root = root
@@ -124,6 +122,7 @@ class PhomodUI(ThemedTk):
             "italic": font.Font(family="Helvetica", size=10, slant="italic"),
             "bold": font.Font(family="Helvetica", size=10, weight="bold"),
             "default": font.Font(family="Helvetica", size=10),
+            "title": font.Font(family="Helvetica", size=12, weight="bold"),
         }
 
     def create_notebook(self):
@@ -152,44 +151,44 @@ class PhomodUI(ThemedTk):
         """Creates a status bar at the bottom of the window."""
         self.status_var = tk.StringVar(value="Ready")
         self.help_manager = HelpTextManager(self.status_var)
-        self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor="w")
-        self.status_bar.pack(side="bottom", fill="x", padx=5, pady=5)
-
-    def toggle_tab_emoji(self, event):
-        """Changes the emoji of the active tab."""
-        current_tab_id = self.notebook.index(self.notebook.select())
-        current_text = self.notebook.tab(current_tab_id, "text")
-        for key, config in self.tab_config.items():
-            if config["label"] in current_text:
-                new_text = f" {config['active']}   {config['label']}    "
-                break
-        else:
-            return
-        for tab_id in range(self.notebook.index("end")):
-            tab_text = self.notebook.tab(tab_id, "text")
-            for key, config in self.tab_config.items():
-                if config["label"] in tab_text:
-                    self.notebook.tab(tab_id, text=f" {config['default']}   {config['label']}    ")
-        self.notebook.tab(current_tab_id, text=new_text)
-        app_logger.info(f"Switched to tab: {current_text}")
-
-    def toggle_details_tab(self, enable=True):
-        """Enables or disables the Details tab based on selection."""
-        details_index = None
-        for i in range(self.notebook.index("end")):
-            tab_text = self.notebook.tab(i, "text")
-            if self.tab_config["details"]["label"] in tab_text:
-                details_index = i
-                break
-        if details_index is not None:
-            state = "normal" if enable else "disabled"
-            self.notebook.tab(details_index, state=state)
-            app_logger.info(f"Details tab {'enabled' if enable else 'disabled'}.")
+        self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor="w",border=2)
+        self.status_bar.pack(side="bottom", fill="x", padx=5, pady=(5,5))
 
     def update_status_bar_text(self, message):
         """Updates the status bar text."""
         self.status_var.set(message)
         app_logger.debug(f"Status updated: {message}")
+
+    def toggle_tab_emoji(self, event):
+        """Changes the emoji of the active tab and resets others."""
+        current_tab_id = self.notebook.index(self.notebook.select())
+        current_text = self.notebook.tab(current_tab_id, "text")
+
+        # Find the corresponding config
+        for key, config in self.tab_config.items():
+            if config["label"] in current_text:
+                active_label = f" {config['active']}   {config['label']}    "
+                default_label = config["default"]
+                break
+        else:
+            return  # Exit if no matching tab config is found
+
+        # Reset all tabs to default emoji
+        for tab_id in range(self.notebook.index("end")):
+            tab_text = self.notebook.tab(tab_id, "text")
+            for key, config in self.tab_config.items():
+                if config["label"] in tab_text:
+                    self.notebook.tab(tab_id, text=f" {config['default']}   {config['label']}    ")
+
+        # Set the active tab emoji
+        self.notebook.tab(current_tab_id, text=active_label)
+
+        app_logger.info(f"Switched to tab: {current_text}")
+
+    def get_available_tabs(self):
+        """Returns a list of available tab labels."""
+        return [config["label"] for key, config in self.tab_config.items()]
+
 
 if __name__ == "__main__":
     from logger_config import app_logger
