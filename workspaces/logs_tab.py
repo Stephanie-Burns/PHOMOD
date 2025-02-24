@@ -1,10 +1,10 @@
 
 import logging
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import filedialog
 
 from phomod_widgets import PHOMODFrame
-from logger_config import LOG_BUFFER
+from config.logger_config import LOG_BUFFER
 
 app_logger = logging.getLogger('FOMODLogger')
 

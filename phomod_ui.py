@@ -5,87 +5,16 @@ import tkinter as tk
 from ttkthemes import ThemedTk
 from tkinter import ttk, font
 
-from tabs import (
+from workspaces import (
     ProjectTab,
-    DetailsTab,
     XMLTab,
     LogsTab,
     SettingsTab,
     DocumentationTab,
 )
+from managers import HelpTextManager, ThemeManager
 
 app_logger = logging.getLogger('FOMODLogger')
-
-
-
-class ThemeManager:
-    def __init__(self, root):
-        self.root = root
-        self.style = ttk.Style(self.root)
-        self.separator = "----------"
-        self.themes_always_on_top = ["Default", "Random"]
-
-    def get_themes(self):
-        """Retrieve a list of available themes."""
-        return self.root.get_themes()
-
-    def get_theme(self):
-        """Retrieve the name of the currently active theme."""
-        return self.style.theme_use()
-
-    def get_theme_options(self):
-        """Retrieve organized theme options for display."""
-        themes = self.get_themes()
-        themes_alphabetical = [t for t in themes if t.lower() not in [s.lower() for s in self.themes_always_on_top]]
-        themes_alphabetical = sorted([t.capitalize() for t in themes_alphabetical])
-        return self.themes_always_on_top + [self.separator] + themes_alphabetical
-
-    def apply_theme(self, theme):
-        """Apply the selected theme to the application and return the applied theme's name."""
-        if theme == self.separator:
-            print("Please select a valid theme.")
-            return None
-        if theme.lower() == "random":
-            all_themes = self.get_themes()
-            choices = [t for t in all_themes if t.lower() != "default"]
-            theme = random.choice(choices) if choices else "default"
-        try:
-            self.root.set_theme(theme.lower())
-            print(f"Applied theme: {theme}")
-            self.root.update_idletasks()
-            return theme  # Return the name of the applied theme
-        except tk.TclError as e:
-            print(f"Error applying theme '{theme}': {e}")
-            return None
-
-
-class HelpTextManager:
-    """Centralized help text manager that binds tooltips to widgets and updates a status bar."""
-
-    def __init__(self, status_var: tk.StringVar):
-        """
-        Initializes the help text manager.
-
-        :param status_var: The StringVar used for the status bar.
-        """
-        self.status_var = status_var
-
-    def bind_help(self, widget, help_text: str):
-        """
-        Binds a help message to a widget. When hovered, it updates the status bar.
-
-        :param widget: The Tkinter widget to bind the help text to.
-        :param help_text: The help text to display when hovering over the widget.
-        """
-        if help_text:
-            widget.bind("<Enter>", lambda event: self.update_status(help_text))
-            widget.bind("<Leave>", lambda event: self.update_status("Ready"))
-            app_logger.info(f"🔗 Help text bound: '{help_text}' to {widget.__class__.__name__}")
-
-    def update_status(self, message):
-        """Updates the status bar text."""
-        self.status_var.set(message)
-        app_logger.info(f"📢 Status updated: {message}")
 
 
 class PhomodUI(ThemedTk):
@@ -191,7 +120,7 @@ class PhomodUI(ThemedTk):
 
 
 if __name__ == "__main__":
-    from logger_config import app_logger
+    from config.logger_config import app_logger
     app_logger.info("Application started")
 
     app = PhomodUI()

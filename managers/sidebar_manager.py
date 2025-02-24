@@ -1,5 +1,4 @@
-import tkinter as tk
-from tkinter import ttk
+
 import logging
 from config.settings import USER_SETTINGS, save_settings
 
@@ -151,79 +150,3 @@ class SidebarManager:
             "sidebar_positions": updated_positions,
             "sidebar_widths": updated_widths
         })
-
-
-class TestSidebar(ttk.Frame):
-    """A sidebar with buttons to change its position."""
-
-    def __init__(self, parent, tab_name, sidebar_manager, key):
-        super().__init__(parent, width=200, relief="sunken", padding=10)
-        self.sidebar_manager = sidebar_manager
-        self.tab_name = tab_name
-        self.key = key
-
-        ttk.Label(self, text=f"Sidebar: {key} in {tab_name}", font=("Arial", 12)).pack(pady=10)
-        ttk.Button(self, text="Close", command=self.sidebar_manager.hide_sidebar).pack(pady=5)
-        ttk.Button(self, text="Move Right", command=lambda: self.sidebar_manager._move_sidebar(tab_name, key, "right")).pack(pady=5)
-        ttk.Button(self, text="Move Left", command=lambda: self.sidebar_manager._move_sidebar(tab_name, key, "left")).pack(pady=5)
-
-
-class TestTab(ttk.Frame):
-    """A tab that integrates with SidebarManager and properly contains sidebars."""
-
-    def __init__(self, parent, sidebar_manager, tab_name, multiple_sidebars=False):
-        super().__init__(parent)
-        self.sidebar_manager = sidebar_manager
-        self.tab_name = tab_name
-
-        # Each tab now has its own PanedWindow
-        self.paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        self.paned.pack(fill="both", expand=True)
-
-        # Main content frame inside the tab
-        self.content_frame = ttk.Frame(self.paned)
-        self.paned.add(self.content_frame, weight=3)
-        ttk.Label(self.content_frame, text=f"This is {tab_name}!", font=("Arial", 14)).pack(pady=10)
-
-        ttk.Button(
-            self.content_frame,
-            text=f"Toggle {tab_name} Sidebar",
-            command=lambda: self.sidebar_manager.toggle_sidebar(self.tab_name, "sidebar"),
-        ).pack(pady=5)
-
-        self.sidebar_manager.register_sidebar(self.tab_name, "sidebar", TestSidebar)
-
-        if multiple_sidebars:
-            ttk.Button(
-                self.content_frame,
-                text=f"Toggle {tab_name} Sidebar 2",
-                command=lambda: self.sidebar_manager.toggle_sidebar(self.tab_name, "sidebar2"),
-            ).pack(pady=5)
-            self.sidebar_manager.register_sidebar(self.tab_name, "sidebar2", TestSidebar)
-
-
-class SidebarTestApp:
-    """Main application to test sidebar positioning."""
-
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Sidebar Persistence Test")
-        self.root.geometry("800x600")
-
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(fill="both", expand=True)
-
-        self.sidebar_manager = SidebarManager(self.notebook)
-        self.tab1 = TestTab(self.notebook, self.sidebar_manager, "Tab 1")
-        self.tab2 = TestTab(self.notebook, self.sidebar_manager, "Tab 2", multiple_sidebars=True)
-
-        self.notebook.add(self.tab1, text="Tab 1")
-        self.notebook.add(self.tab2, text="Tab 2")
-
-        self.notebook.bind("<<NotebookTabChanged>>", lambda _: self.sidebar_manager.hide_sidebar())
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = SidebarTestApp(root)
-    root.mainloop()
