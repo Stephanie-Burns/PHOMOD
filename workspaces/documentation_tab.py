@@ -6,7 +6,7 @@ import re
 
 from phomod_widgets import PHOMODFrame, PHOMODTextArea, PHOMODLabel, PHOMODComboBox, PHOMODButton, PHOMODCheckbutton
 
-app_logger = logging.getLogger('FOMODLogger')
+app_logger = logging.getLogger('PHOMODLogger')
 
 
 class DocumentationTab(PHOMODFrame):
@@ -48,7 +48,7 @@ For more details, check the PHOMOD guidelines.
 
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
-        app_logger.info("Initializing DocumentationTab")
+        app_logger.info(f"🚦 Initializing {self.__class__.__name__}")
         self.create_widgets()
 
     def create_widgets(self):
@@ -106,7 +106,7 @@ For more details, check the PHOMOD guidelines.
         self._apply_markdown_formatting(content)
 
         self.doc_text.configure(state="disabled")
-        app_logger.info(f"Loaded document: {selected_doc}")
+        app_logger.info(f"💾 Loaded document: {selected_doc}")
 
     def _apply_markdown_formatting(self, content):
         """Applies Markdown formatting in the Tkinter Text widget."""
@@ -161,13 +161,13 @@ For more details, check the PHOMOD guidelines.
 
                 # Apply links
                 for match in link_pattern.finditer(line):
-                    text, url = match.groups()
+                    text, url_pattern = match.groups()
                     self.doc_text.insert(tk.END, formatted_line[last_end:match.start()])
                     start_idx = self.doc_text.index(tk.END)
                     self.doc_text.insert(tk.END, text, "link")
                     self.doc_text.tag_bind("link", "<Enter>", lambda e: self.doc_text.config(cursor="hand2"))
                     self.doc_text.tag_bind("link", "<Leave>", lambda e: self.doc_text.config(cursor=""))
-                    self.doc_text.tag_bind("link", "<Button-1>", lambda e, url=url: webbrowser.open(url))
+                    self.doc_text.tag_bind("link", "<Button-1>", lambda e, url=url_pattern: webbrowser.open(url))
                     last_end = match.end()
 
                 self.doc_text.insert(tk.END, formatted_line[last_end:] + "\n")

@@ -6,7 +6,7 @@ import pyperclip
 from enum import Enum
 from collections import namedtuple
 
-app_logger = logging.getLogger("FOMODLogger")
+app_logger = logging.getLogger("PHOMODLogger")
 
 MenuAction = namedtuple("MenuAction", ["label", "accelerator", "group", "separator", "enabled"])
 

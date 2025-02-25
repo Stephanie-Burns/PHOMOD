@@ -132,7 +132,7 @@ sudo pacman -S xclip    # Arch Linux
 
 #### **Context menu doesn't appear?**
 - Ensure the widget is correctly bound to the context menu.
-- Debug logs can be enabled by configuring `FOMODLogger` to `DEBUG` level.
+- Debug logs can be enabled by configuring `PHOMODLogger` to `DEBUG` level.
 
 ---
 

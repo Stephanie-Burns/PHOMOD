@@ -7,7 +7,7 @@ from tkinter import ttk, Menu
 
 import pyperclip
 
-app_logger = logging.getLogger("FOMODLogger")
+app_logger = logging.getLogger("PHOMODLogger")
 
 MenuAction = namedtuple("MenuAction", ["label", "accelerator", "group", "separator", "enabled"])
 

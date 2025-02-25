@@ -8,7 +8,7 @@ from phomod_widgets import (
     PHOMODEntry, PHOMODButton, PHOMODListbox, PHOMODTreeview
 )
 
-app_log = logging.getLogger('FOMODLogger')
+app_log = logging.getLogger('PHOMODLogger')
 
 
 class XMLPreviewSidebar(PHOMODFrame):

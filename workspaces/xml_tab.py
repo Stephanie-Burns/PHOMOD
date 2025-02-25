@@ -6,13 +6,13 @@ import tkinter as tk
 from phomod_context_menu import PHOMODContextMenu
 from phomod_widgets import PHOMODFrame, PHOMODLabel, PHOMODTextArea, PHOMODButton, PHOMODSyntaxTextArea
 
-app_logger = logging.getLogger('FOMODLogger')
+app_logger = logging.getLogger('PHOMODLogger')
 
 
 class XMLTab(PHOMODFrame):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
-        app_logger.info("Initializing XMLTab")
+        app_logger.info(f"🚦 Initializing {self.__class__.__name__}")
         self.create_widgets()
 
     def create_widgets(self):

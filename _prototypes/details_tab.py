@@ -6,7 +6,7 @@ from tkinter import ttk
 from _prototypes.image_manipulation_prototype import ImageViewerWidget
 from phomod_widgets import PHOMODFrame
 
-app_logger = logging.getLogger('FOMODLogger')
+app_logger = logging.getLogger('PHOMODLogger')
 
 
 class DetailsTab(PHOMODFrame):

@@ -6,23 +6,22 @@ from tkinter import ttk
 
 from phomod_mixins import PHOMODHelpTextMixin, PHOMODContextMenuMixin, PHOMODScrollRedirectMixin
 
-app_logger = logging.getLogger('FOMODLogger')
+app_logger = logging.getLogger('PHOMODLogger')
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 #                                                                                              🏗 STRUCTURAL CONTAINERS
 # ----------------------------------------------------------------------------------------------------------------------
-class PHOMODFrame(ttk.Frame, PHOMODHelpTextMixin):
+class PHOMODFrame(ttk.Frame):
     """A basic frame with optional help text integration."""
-    def __init__(self, parent, controller=None, help_text=None, **kwargs):
+    def __init__(self, parent, controller=None, **kwargs):
         super().__init__(parent, **kwargs)
         self.controller = controller
-        self._bind_help_text(parent, help_text)
 
 
 class PHOMODLabelFrame(ttk.Labelframe, PHOMODHelpTextMixin):
     """A label frame with optional custom label widget and help text."""
-    def __init__(self, parent, controller=None, text="", help_text=None, label_widget=None, **kwargs):
+    def __init__(self, parent, controller=None, help_text=None, text="", label_widget=None, **kwargs):
         self.controller = controller
         self._configure_label(kwargs, text, label_widget)
         super().__init__(parent, **kwargs)
@@ -37,7 +36,7 @@ class PHOMODLabelFrame(ttk.Labelframe, PHOMODHelpTextMixin):
             kwargs["text"] = text
 
 
-class PHOMODScrollableFrame(tk.Frame):
+class PHOMODScrollableFrame(ttk.Frame):
     """A reusable scrollable frame with automatic mousewheel support."""
     def __init__(self, parent, controller=None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
@@ -49,7 +48,7 @@ class PHOMODScrollableFrame(tk.Frame):
         self.canvas.pack(side="left", fill=tk.BOTH, expand=True)
 
         # Interior Container
-        self.inner_frame = tk.Frame(self.canvas, bg="lightgray")
+        self.inner_frame = ttk.Frame(self.canvas)
         self.inner_window = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
 
         # Events
@@ -249,12 +248,12 @@ class _PHOMODAttachableScrollbar:
         self.parent = widget.master
 
         if attach_y:
-            self.scrollbar_y = tk.Scrollbar(self.parent, orient="vertical", command=self.widget.yview)
+            self.scrollbar_y = ttk.Scrollbar(self.parent, orient="vertical", command=self.widget.yview)
             self.widget.configure(yscrollcommand=self.scrollbar_y.set)
             self.scrollbar_y.pack(side="right", fill="y", **kwargs)  # Attach scrollbar to the right
 
         if attach_x:
-            self.scrollbar_x = tk.Scrollbar(self.parent, orient="horizontal", command=self.widget.xview, **kwargs)
+            self.scrollbar_x = ttk.Scrollbar(self.parent, orient="horizontal", command=self.widget.xview, **kwargs)
             self.widget.configure(xscrollcommand=self.scrollbar_x.set,  **kwargs)
             self.scrollbar_x.pack(side="bottom", fill="x")  # Attach scrollbar at bottom
 

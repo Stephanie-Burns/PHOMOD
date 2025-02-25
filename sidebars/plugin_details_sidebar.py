@@ -9,7 +9,7 @@ from phomod_widgets import (
 )
 from _prototypes.image_manipulation_prototype import ImageViewerWidget
 
-app_log = logging.getLogger('FOMODLogger')
+app_log = logging.getLogger('PHOMODLogger')
 
 
 class PluginDetailsSidebar(PHOMODFrame):

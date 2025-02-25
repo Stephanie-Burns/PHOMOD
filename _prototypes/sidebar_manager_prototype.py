@@ -3,7 +3,7 @@ from tkinter import ttk
 import logging
 from config.settings import USER_SETTINGS, save_settings
 
-app_log = logging.getLogger("FOMODLogger")
+app_log = logging.getLogger("PHOMODLogger")
 
 
 class SidebarManager:

@@ -1,7 +1,7 @@
 import logging
 import tkinter as tk
 
-app_logger = logging.getLogger('FOMODLogger')
+app_logger = logging.getLogger('PHOMODLogger')
 
 
 class PHOMODHelpTextMixin:
@@ -10,24 +10,25 @@ class PHOMODHelpTextMixin:
     def _bind_help_text(self, parent, help_text):
         """Automatically binds help text if the parent has a help manager."""
         if help_text:
-            controller = self._find_controller(parent)  # Walk up the widget tree
-            if controller and hasattr(controller, "help_manager"):
-                controller.help_manager.bind_help(self, help_text)
-                app_logger.info(
-                    f"✅ Bound help text: '{help_text}' to {self.__class__.__name__}"
-                )
+            help_manager = self._find_help_manager(parent)
+            if help_manager:
+                help_manager.bind_help(self, help_text)
+                app_logger.debug(f"✅ Bound help text: '{help_text}' to {self.__class__.__name__}")
             else:
-                app_logger.warning(
-                    f"⚠️ Could not find a valid controller for {self.__class__.__name__} when binding help text."
-                )
+                app_logger.warning(f"⚠️ No valid help manager found for {self.__class__.__name__}")
 
-    def _find_controller(self, widget):
-        """Walks up the widget tree to find the controller."""
-        while widget is not None:
-            if hasattr(widget, "controller"):  # Found a widget with a controller
-                return widget.controller
-            widget = getattr(widget, "master", None)  # Move up the widget tree
-        return None  # No controller found
+    def _find_help_manager(self, widget):
+        """Walks up the widget tree to find the help manager. Falls back to the toplevel widget."""
+        while widget:
+            if hasattr(widget, "help_manager"):
+                return widget.help_manager
+            widget = getattr(widget, "master", None)
+        # Fallback: try the toplevel widget.
+        root = self.winfo_toplevel() if hasattr(self, "winfo_toplevel") else None
+        if root and hasattr(root, "help_manager"):
+            return root.help_manager
+        return None
+
 
 
 class PHOMODContextMenuMixin:

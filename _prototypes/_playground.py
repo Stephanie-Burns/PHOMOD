@@ -5,7 +5,7 @@ import pyperclip
 
 # Enable detailed logging
 logging.basicConfig(level=logging.DEBUG)
-app_logger = logging.getLogger("FOMODLogger")
+app_logger = logging.getLogger("PHOMODLogger")
 
 
 class ContextMenuAction:

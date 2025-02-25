@@ -8,7 +8,7 @@ LOGS_DIR = USER_SETTINGS.get("logs_dir", "/tmp")
 os.makedirs(LOGS_DIR, exist_ok=True)  # Ensure the directory exists
 
 # Set up the log file path
-LOG_FILE_PATH = os.path.join(LOGS_DIR, "FOMODLogger.log")
+LOG_FILE_PATH = os.path.join(LOGS_DIR, "PHOMODLogger.log")
 
 # Log buffer (for capturing recent logs)
 LOG_BUFFER = deque(maxlen=100)
@@ -22,7 +22,7 @@ class BufferedHandler(logging.Handler):
         LOG_BUFFER.append(log_entry)
 
 
-def configure_logger(name="FOMODLogger", log_to_console=True, log_to_file=True):
+def configure_logger(name="PHOMODLogger", log_to_console=True, log_to_file=True):
     """Configures a logger with console, file, and buffered logging."""
     logger = logging.getLogger(name)
 
