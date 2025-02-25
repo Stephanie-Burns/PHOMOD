@@ -1,6 +1,6 @@
 
 import logging
-from config.settings import USER_SETTINGS, save_settings
+from config import SETTINGS
 
 app_log = logging.getLogger("PHOMODLogger")
 
@@ -17,7 +17,7 @@ class SidebarManager:
         self.sidebar_container = None  # The container (PanedWindow) where the sidebar is attached
 
         # Load sidebar positions from settings
-        self.sidebar_positions = USER_SETTINGS.get("sidebar_positions", {})
+        self.sidebar_positions = SETTINGS.get("sidebar_positions", {})
         self.cleanup_missing_sidebars()
 
     def register_sidebar(self, tab_name, key, sidebar_cls):
@@ -111,7 +111,7 @@ class SidebarManager:
             # Update position in memory and settings
             self.sidebars[tab_name][key] = (sidebar_cls, position)
             self.sidebar_positions.setdefault(tab_name, {})[key] = position
-            save_settings({"sidebar_positions": self.sidebar_positions})
+            SETTINGS.save_settings({"sidebar_positions": self.sidebar_positions})
             self.hide_sidebar()
             self.toggle_sidebar(tab_name, key)
             app_log.debug(f"🔄 Moved sidebar '{key}' on tab '{tab_name}' to the {position}.")
@@ -122,9 +122,9 @@ class SidebarManager:
             try:
                 # Use winfo_width to get the current width of the sidebar
                 width = self.sidebar_frame.winfo_width()
-                sidebar_widths = USER_SETTINGS.get("sidebar_widths", {})
+                sidebar_widths = SETTINGS.get("sidebar_widths", {})
                 sidebar_widths.setdefault(self.active_tab, {})[self.active_sidebar] = width
-                save_settings({"sidebar_widths": sidebar_widths})
+                SETTINGS.save_settings({"sidebar_widths": sidebar_widths})
                 app_log.debug(f"💾 Saved sidebar '{self.active_sidebar}' width: {width}.")
             except Exception as e:
                 app_log.warning(f"⚠️ Failed to save sidebar width: {e}")
@@ -134,19 +134,19 @@ class SidebarManager:
         updated_positions = {}
         updated_widths = {}
 
-        for tab, sidebars in USER_SETTINGS.get("sidebar_positions", {}).items():
+        for tab, sidebars in SETTINGS.get("sidebar_positions", {}).items():
             for key in list(sidebars):
                 if key not in self.sidebars.get(tab, {}):
                     app_log.warning(f"⚠️ Removing stale sidebar setting: {key} on {tab}")
                 else:
                     updated_positions.setdefault(tab, {})[key] = sidebars[key]
 
-        for tab, sidebars in USER_SETTINGS.get("sidebar_widths", {}).items():
+        for tab, sidebars in SETTINGS.get("sidebar_widths", {}).items():
             for key in list(sidebars):
                 if key in updated_positions.get(tab, {}):
                     updated_widths.setdefault(tab, {})[key] = sidebars[key]
 
-        save_settings({
+        SETTINGS.save_settings({
             "sidebar_positions": updated_positions,
             "sidebar_widths": updated_widths
         })

@@ -1,4 +1,3 @@
-
 import sys
 import logging
 import tkinter as tk
@@ -6,18 +5,18 @@ from ttkthemes import ThemedTk
 from tkinter import ttk, font
 from appdata import phomod_map
 
-from managers import ThemeManager, WorkspaceManager, LogManager
+from config import SETTINGS
+from managers import ThemeManager, WorkspaceManager, LogManager, WorkspaceConfig
+from workspaces import ProjectTab, XMLTab, LogsTab, SettingsTab, DocumentationTab
 from status_bar import StatusBar
 
 app_logger = logging.getLogger('PHOMODLogger')
-
 
 class PhomodUI(ThemedTk):
     def __init__(self):
         super().__init__(theme="arc")
         self.setup_ui()
         app_logger.info(f"🚀 ==== application [{phomod_map()}] started ==== 🚀")
-
         self.protocol("WM_DELETE_WINDOW", self.shutdown)
 
     def setup_ui(self):
@@ -58,28 +57,55 @@ class PhomodUI(ThemedTk):
         self.help_manager = self.status_bar.help_manager
 
     def update_status_bar_text(self, message):
-        """Updates the status bar immediately (if needed) via the StatusBar class."""
+        """Updates the status bar immediately via the StatusBar class."""
         self.status_bar.update_text(message)
 
     def create_workspaces(self):
+        """Creates and registers workspaces."""
         self.workspace_manager = WorkspaceManager(self.notebook, controller=self)
+
+        workspaces = [
+            WorkspaceConfig("project", "Project",
+                            "📦", "🚚",
+                            ProjectTab(self.notebook, controller=self)
+                            ),
+            WorkspaceConfig("xml", "XML Preview",
+                            "🍳", "🍽️",
+                            XMLTab(self.notebook, controller=self)
+                            ),
+            WorkspaceConfig("logs", "Logs",
+                            "🌲", "🪵",
+                            LogsTab(self.notebook, controller=self)
+                            ),
+            WorkspaceConfig("settings", "Settings",
+                            "⚙️", "🔧",
+                            SettingsTab(self.notebook, controller=self)
+                            ),
+            WorkspaceConfig("docs", "Help",
+                            "📔", "📖",
+                            DocumentationTab(self.notebook, controller=self)
+                            ),
+        ]
+
+        # Register workspaces
+        for workspace in workspaces:
+            self.workspace_manager.register_workspace(workspace)
+
+        # Create and assign the LogManager to the controller so that LogsTab can use it.
+        self.log_manager = LogManager(max_buffer=100)
 
     def on_workspace_change(self, event):
         self.workspace_manager.toggle_workspace_emoji()
 
     def shutdown(self):
         """Handles graceful application shutdown."""
-
+        SETTINGS.save()
         app_logger.info("🔚 Initializing shutdown")
-        # Save workspace state before quitting
         if hasattr(self, 'workspace_manager'):
             self.workspace_manager.save_workspace_state()
-
-        # Flush logs before closing
+        # Close all logger handlers to flush logs before closing
         for handler in logging.getLogger().handlers:
             handler.close()
-
-
         app_logger.info(f"🛑 ==== application [{phomod_map()}] shutdown complete ==== 🛑")
         self.destroy()
         sys.exit(0)

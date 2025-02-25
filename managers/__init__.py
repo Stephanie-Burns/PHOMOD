@@ -2,8 +2,8 @@
 from .help_text_manager import HelpTextManager
 from .sidebar_manager import SidebarManager
 from .theme_manager import ThemeManager
-from .workspace_manager import WorkspaceManager
-from .log_manager import LogManager
+from .workspace_manager import WorkspaceManager, WorkspaceConfig
+from .log_manager import LogManager, TextHandler
 
 
 __all__ = [
@@ -11,7 +11,9 @@ __all__ = [
     "SidebarManager",
     "ThemeManager",
     "WorkspaceManager",
+    "WorkspaceConfig",
     "LogManager",
+    "TextHandler",
 ]
 
 print("Managers __init__ loaded; LogManager =", LogManager)

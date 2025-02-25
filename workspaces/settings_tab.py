@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-
+from config import SETTINGS
 from phomod_widgets import (
     PHOMODFrame, PHOMODLabelFrame, PHOMODScrollableFrame,
     PHOMODLabel, PHOMODEntry,
@@ -24,6 +24,7 @@ class BaseSettingsSection(PHOMODLabelFrame):
         )
         super().__init__(parent, controller=controller, label_widget=title_label, help_text=help_text, **kwargs)
         self.controller = controller
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 #                                                                                                     Theme Settings 🎨
@@ -78,13 +79,9 @@ class ThemeSettingsSection(BaseSettingsSection):
             self.apply_theme()
 
 
-
-
-
 # ----------------------------------------------------------------------------------------------------------------------
 #                                                                                                    Update Settings 🔄
 # ----------------------------------------------------------------------------------------------------------------------
-
 class UpdateSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Update Settings", "Configure automatic update checks.")
@@ -164,7 +161,6 @@ class UIAccessibilitySettingsSection(BaseSettingsSection):
 # ----------------------------------------------------------------------------------------------------------------------
 #                                                                                              File & Data Management 🗄
 # ----------------------------------------------------------------------------------------------------------------------
-
 class FileDataSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "File & Data Management", "Manage file paths and directories.")
@@ -200,34 +196,139 @@ class FileDataSettingsSection(BaseSettingsSection):
 class LoggingSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Logging Settings", "Configure logging preferences.")
-        self.disable_logging_var = tk.BooleanVar(value=False)
-        self.log_rotation_var = tk.StringVar(value="Daily")
-        self.log_path_var = tk.StringVar(value="Not Set")
+        self.disable_logging_var    = tk.BooleanVar(value=SETTINGS.get("disable_file_logging", False))
+        self.log_rotation_var       = tk.StringVar(value=SETTINGS.get("log_rotation", "Max file size"))
+        self.log_path_var           = tk.StringVar(value=SETTINGS.get("logs_dir", "Not Set"))
+        self.log_file_size_var      = tk.IntVar(value=SETTINGS.get("max_log_size_mb", 37))
+        self.log_level_var          = tk.StringVar(value=SETTINGS.get("log_level", "INFO"))
+
         self._build()
 
     def _build(self):
+        # Log Level Dropdown
+        PHOMODLabel(self, text="Log Level:", help_text="Set the verbosity of logging output.").pack(anchor="w", padx=5, pady=2)
+        self.log_level_menu = PHOMODComboBox(
+            self,
+            textvariable=self.log_level_var,
+            values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            state="readonly",
+            help_text="Select the log level."
+        )
+        self.log_level_menu.pack(fill=tk.X, padx=5, pady=5)
+        self.log_level_menu.bind("<<ComboboxSelected>>", self.on_log_level_change)
+
+        # Log Rotation Dropdown
         PHOMODLabel(self, text="Log Rotation:", help_text="Select log rotation frequency.").pack(anchor="w", padx=5, pady=2)
         self.log_rotation_menu = PHOMODComboBox(
-            self, textvariable=self.log_rotation_var, values=["Daily", "Weekly", "Max file size"],
-            state="readonly", help_text="Select how frequently logs rotate."
+            self,
+            textvariable=self.log_rotation_var,
+            values=["Max file size", "Monthly", "Weekly"],
+            state="readonly",
+            help_text="Select how frequently logs rotate."
         )
         self.log_rotation_menu.pack(fill=tk.X, padx=5, pady=5)
+        self.log_rotation_menu.bind("<<ComboboxSelected>>", self.on_log_rotation_change)
+
+        # Max Log Size Entry
+        self.log_file_size_frame = PHOMODFrame(self)
+        PHOMODLabel(self.log_file_size_frame, text="Max File Size (MB):").pack(side="left", padx=(5, 2))
+        self.log_file_size_entry = PHOMODEntry(
+            self.log_file_size_frame,
+            textvariable=self.log_file_size_var,
+            width=6
+        )
+        self.log_file_size_entry.pack(side="left", padx=5)
+        self.log_file_size_entry.bind("<FocusOut>", self.on_log_file_size_change)
+        self.log_file_size_frame.pack(anchor="w", padx=5, pady=5)
+
+        # Log File Location
         PHOMODLabel(self, text="Log File Location:", help_text="Choose where logs are stored.").pack(anchor="w", padx=5, pady=2)
-        PHOMODEntry(self, textvariable=self.log_path_var, state="readonly").pack(fill=tk.X, padx=5, pady=5)
-        PHOMODButton(
-            self, text="Set Log Location", command=self.choose_log_location,
+        self.log_path_entry = PHOMODEntry(self, textvariable=self.log_path_var, state="readonly")
+        self.log_path_entry.pack(fill=tk.X, padx=5, pady=5)
+        self.log_path_button = PHOMODButton(
+            self,
+            text="Set Log Location",
+            command=self.choose_log_location,
             help_text="Select a directory to save logs."
-        ).pack(padx=5, pady=5)
-        PHOMODCheckbutton(
-            self, text="Disable Logging", variable=self.disable_logging_var,
-            help_text="Turn off logging entirely."
-        ).pack(anchor="w", padx=5, pady=5)
+        )
+        self.log_path_button.pack(padx=5, pady=5)
+
+        # Disable File Logging Checkbox
+        self.disable_logging_check = PHOMODCheckbutton(
+            self,
+            text="Disable File Logging",
+            variable=self.disable_logging_var,
+            help_text="Disables saving logs to a file. UI logs will still be displayed.",
+            command=self.on_disable_logging_change
+        )
+        self.disable_logging_check.pack(anchor="w", padx=5, pady=5)
+
+        # Initialize UI state in a defined order
+        self.on_disable_logging_change()
+        self.on_log_rotation_change()
+
         app_logger.info("🏗️ Logging Settings section created.")
 
+    def update_file_size_entry_state(self):
+        """
+        Updates the state of the max file size entry based on the current log rotation
+        setting and whether logging is disabled.
+        """
+        is_max_file_size = self.log_rotation_var.get() == "Max file size"
+        is_disabled = self.disable_logging_var.get()
+        new_state = "normal" if is_max_file_size and not is_disabled else "disabled"
+        self.log_file_size_entry.config(state=new_state)
+
     def choose_log_location(self):
-        directory = filedialog.askdirectory()
-        if directory:
-            self.log_path_var.set(directory)
+        """Opens a dialog to choose the log directory and updates the settings immediately."""
+        if not self.disable_logging_var.get():
+            directory = filedialog.askdirectory()
+            if directory:
+                self.log_path_var.set(directory)
+                SETTINGS.set("logs_dir", directory)
+                app_logger.info(f"📁 Log directory set to: {directory}")
+
+    def on_log_file_size_change(self, *_):
+        """Saves the max log file size when the entry loses focus, with input validation."""
+        if self.log_rotation_var.get() == "Max file size":
+            try:
+                size = int(self.log_file_size_var.get())
+                if size <= 0:
+                    raise ValueError("File size must be positive")
+                SETTINGS.set("max_log_size_mb", size)
+                app_logger.info(f"📏 Max file size set to: {size}MB")
+            except ValueError:
+                app_logger.warning("⚠️ Invalid file size entered. Please enter a positive integer.")
+
+    def on_log_rotation_change(self, *_):
+        """Saves log rotation setting and updates the file size entry state."""
+        SETTINGS.set("log_rotation", self.log_rotation_var.get())
+        app_logger.info(f"🔄 Log rotation updated: {self.log_rotation_var.get()}")
+        self.update_file_size_entry_state()
+
+    def on_disable_logging_change(self, *_):
+        """Updates UI based on the disable logging checkbox and saves the setting."""
+        is_disabled = self.disable_logging_var.get()
+        self.log_rotation_menu.config(state="disabled" if is_disabled else "readonly")
+        self.log_path_entry.config(state="disabled" if is_disabled else "readonly")
+        self.log_path_button.config(state="disabled" if is_disabled else "normal")
+        SETTINGS.set("disable_file_logging", is_disabled)
+        app_logger.info(f"📢 File logging toggled: {'Disabled' if is_disabled else 'Enabled'}")
+        self.update_file_size_entry_state()
+
+    def on_log_level_change(self, *_):
+        """Updates the log level dynamically and saves immediately."""
+        new_level = self.log_level_var.get()
+        SETTINGS.set("log_level", new_level)
+        log_level_map = {
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL,
+        }
+        app_logger.setLevel(log_level_map.get(new_level, logging.INFO))
+        app_logger.info(f"🔊 Log level changed to {new_level}")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -237,31 +338,35 @@ class WorkspaceControlSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Tab Control", "Hide or show certain workspaces.")
         self.hidden_workspaces = {}
-        self.required_workspaces = {"Project", "Settings"}
+        self.required_workspaces = {"Project", "Settings"}  # Required workspaces can't be hidden
         self._build()
 
     def _build(self):
         workspaces_check_frame = PHOMODFrame(self)
         workspaces_check_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        for workspace in self.controller.workspace_manager.get_available_workspaces():
-            if workspace not in self.required_workspaces:
-                self.hidden_workspaces[workspace] = tk.BooleanVar(value=False)
+        available_workspaces = self.controller.workspace_manager.get_available_workspaces()
+
+        for workspace_label in available_workspaces:
+            if workspace_label not in self.required_workspaces:
+                self.hidden_workspaces[workspace_label] = tk.BooleanVar(value=False)
                 PHOMODCheckbutton(
                     workspaces_check_frame,
-                    text=f"Hide {workspace}",
+                    text=f"Hide {workspace_label}",
                     command=self.apply_workspace_visibility,
-                    variable=self.hidden_workspaces[workspace],
-                    help_text=f"Toggle visibility of the {workspace} workspace."
+                    variable=self.hidden_workspaces[workspace_label],
+                    help_text=f"Toggle visibility of the {workspace_label} workspace."
                 ).pack(anchor="w", padx=5, pady=2)
+
         app_logger.info("🏗️ Tab Control section created.")
 
     def apply_workspace_visibility(self):
-        for workspace, var in self.hidden_workspaces.items():
+        """Apply workspace visibility settings."""
+        for workspace_label, var in self.hidden_workspaces.items():
             if var.get():
-                self.controller.workspace_manager.hide_workspace(workspace)
+                self.controller.workspace_manager.hide_workspace(workspace_label)
             else:
-                self.controller.workspace_manager.show_workspace(workspace)
+                self.controller.workspace_manager.show_workspace(workspace_label)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

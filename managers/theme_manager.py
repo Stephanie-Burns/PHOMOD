@@ -2,7 +2,7 @@ import logging
 import random
 import tkinter as tk
 from tkinter import ttk
-from config.settings import USER_SETTINGS, save_settings
+from config import SETTINGS
 
 app_logger = logging.getLogger("PHOMODLogger")
 
@@ -14,9 +14,9 @@ class ThemeManager:
     def __init__(self, root):
         self.root = root
         self.style = ttk.Style(self.root)
-        self.current_theme = USER_SETTINGS.get("theme", "Arc").capitalize()
+        self.current_theme = SETTINGS.get("theme", "Arc").capitalize()
         # Merge user settings with our defaults
-        self.blacklisted_themes = set(USER_SETTINGS.get("theme_blacklist", [])).union(self.DEFAULT_BLACKLIST)
+        self.blacklisted_themes = set(SETTINGS.get("theme_blacklist", [])).union(self.DEFAULT_BLACKLIST)
         self.apply_theme(self.current_theme, force=True)
 
     def get_theme(self):
@@ -57,8 +57,8 @@ class ThemeManager:
             # Use the ttkthemes API to set the theme
             self.root.set_theme(theme.lower())
             self.current_theme = theme
-            USER_SETTINGS["theme"] = theme
-            save_settings(USER_SETTINGS)
+            SETTINGS.set("theme", theme)
+            SETTINGS.save()
             app_logger.info(f"🎨 Theme changed: {theme}")
             self.refresh_ui_styles()
             return theme

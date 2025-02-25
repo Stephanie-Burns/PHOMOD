@@ -3,7 +3,7 @@ import logging
 import tkinter as tk
 
 from phomod_widgets import PHOMODFrame
-from managers.log_manager import LogManager
+from managers import LogManager
 
 app_logger = logging.getLogger("PHOMODLogger")
 
@@ -15,7 +15,8 @@ class LogsTab(PHOMODFrame):
         self.create_widgets()
         self.log_manager.attach_text_handler(self.log_text)
         self.create_context_menu()
-        self.log_manager.flush_buffer_to_widget(self.log_text)
+        self.log_manager.set_text_widget(self.log_text)
+        self.log_manager.flush_buffer()
 
     def create_widgets(self):
         text_frame = tk.Frame(self)

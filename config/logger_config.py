@@ -1,10 +1,10 @@
 import logging
 import os
 from collections import deque
-from config.settings import USER_SETTINGS, save_settings
+from config import SETTINGS
 
 # Log directory from settings
-LOGS_DIR = USER_SETTINGS.get("logs_dir", "/tmp")
+LOGS_DIR = SETTINGS.get("logs_dir", "/tmp")
 os.makedirs(LOGS_DIR, exist_ok=True)  # Ensure the directory exists
 
 # Set up the log file path
@@ -29,7 +29,7 @@ def configure_logger(name="PHOMODLogger", log_to_console=True, log_to_file=True)
     if len(logger.handlers) > 0:  # Return existing logger if configured
         return logger
 
-    log_level_str = USER_SETTINGS.get("log_level", "INFO").upper()
+    log_level_str = SETTINGS.get("log_level", "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
 
     logger.setLevel(log_level)
