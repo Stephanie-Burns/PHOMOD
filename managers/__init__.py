@@ -15,5 +15,3 @@ __all__ = [
     "LogManager",
     "TextHandler",
 ]
-
-print("Managers __init__ loaded; LogManager =", LogManager)

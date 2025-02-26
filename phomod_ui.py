@@ -8,7 +8,7 @@ from appdata import phomod_map
 from config import SETTINGS
 from managers import ThemeManager, WorkspaceManager, LogManager, WorkspaceConfig
 from workspaces import ProjectTab, XMLTab, LogsTab, SettingsTab, DocumentationTab
-from status_bar import StatusBar
+from components import StatusBar
 
 app_logger = logging.getLogger('PHOMODLogger')
 
