@@ -205,7 +205,7 @@ class ModStructureEditor(PHOMODFrame):
 # ----------------------------------------------------------------------------------------------------------------------
 #                                                                                                        📦 Project Tab
 # ----------------------------------------------------------------------------------------------------------------------
-class ProjectTab(PHOMODFrame):
+class ProjectWorkspaceView(PHOMODFrame):
     """
     ProjectTab is the main interface where users load a project, view and edit the mod structure,
     and check plugin details. It assembles the SidebarToggleBar, ProjectLoaderSidebar,

@@ -9,7 +9,7 @@ from phomod_widgets import PHOMODFrame, PHOMODTextArea, PHOMODLabel, PHOMODCombo
 app_logger = logging.getLogger('PHOMODLogger')
 
 
-class DocumentationTab(PHOMODFrame):
+class DocumentationEditorView(PHOMODFrame):
     """Allows users to browse various PHOMOD documents like README, API Docs, and other guides."""
 
     DOCUMENTS = {

@@ -1,5 +1,8 @@
+
 import logging
 import tkinter as tk
+from typing import Optional, List, Callable
+from components import ContextMenuManager, MenuItem, ContextMenuConfig
 
 app_logger = logging.getLogger('PHOMODLogger')
 
@@ -30,21 +33,47 @@ class PHOMODHelpTextMixin:
         return None
 
 
-
 class PHOMODContextMenuMixin:
-    """Mixin to attach a shared context menu to widgets with OS compatibility."""
+    """Mixin to add a customizable context menu to text widgets."""
 
-    def _bind_context_menu(self, context_menu):
-        """Binds the context menu to right-click events."""
-        if context_menu:
-            self.context_menu = context_menu
-            self.bind("<Button-3>", self._show_context_menu)  # Right-click (Linux/Windows)
-            self.bind("<Button-2>", self._show_context_menu)  # MacOS secondary click
+    def __init__(self, context_menu_config: Optional["ContextMenuConfig"] = None,
+                 custom_menu_items: Optional[List[MenuItem]] = None):
+        self.context_menu_manager = None  # Set during attachment
+        self.context_menu_config = context_menu_config or ContextMenuConfig()
 
-    def _show_context_menu(self, event):
-        """Displays the context menu at the mouse position."""
-        if hasattr(self, "context_menu") and self.context_menu:
-            self.context_menu.show_menu(event, self)
+        # Allow customization but fall back to a sensible default if None provided
+        self.menu_items = custom_menu_items or self._default_menu_items()
+
+    def attach_context_menu(self, widget: tk.Widget):
+        """Attach the context menu to the given widget."""
+        if not self.context_menu_manager:
+            self.context_menu_manager = ContextMenuManager(widget, self.context_menu_config)
+            self.context_menu_manager.attach(widget, self.menu_items)
+
+    def _default_menu_items(self) -> List[MenuItem]:
+        """Provide default menu actions for general text areas."""
+        return [
+            MenuItem("Copy", lambda: self._clipboard_action("copy"), "copy.png", "<Control-c>"),
+            MenuItem("Paste", lambda: self._clipboard_action("paste"), "paste.png", "<Control-v>"),
+            MenuItem("Select All", lambda: self._clipboard_action("select_all"), None, "<Control-a>"),
+        ]
+
+    def _clipboard_action(self, action: str):
+        """Perform clipboard-related actions."""
+        if action == "cut":
+            self.event_generate("<<Cut>>")
+        elif action == "copy":
+            self.event_generate("<<Copy>>")
+        elif action == "paste":
+            self.event_generate("<<Paste>>")
+        elif action == "select_all":
+            self.tag_add("sel", "1.0", "end")
+
+    def _clear_text(self):
+        """Clears the text widget's contents."""
+        self.configure(state="normal")
+        self.delete("1.0", tk.END)
+        self.configure(state="disabled")
 
 
 class PHOMODScrollRedirectMixin:

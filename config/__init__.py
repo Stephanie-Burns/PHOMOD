@@ -1,2 +1,2 @@
 
-from .config_manager import SETTINGS
+from .phomod_config import SETTINGS

@@ -1,198 +1,192 @@
 import tkinter as tk
-from tkinter import ttk, Menu, filedialog
-import logging
-import pyperclip
-
-# Enable detailed logging
-logging.basicConfig(level=logging.DEBUG)
-app_logger = logging.getLogger("PHOMODLogger")
+from dataclasses import dataclass
+from typing import Callable, Optional, List
 
 
-class ContextMenuAction:
-    def __init__(self, label, command, accelerator=None, separator=False):
-        self.label = label
-        self.command = command
-        self.accelerator = accelerator
-        self.separator = separator
+@dataclass
+class MenuItem:
+    """Represents a single item in the context menu."""
+    label: str
+    command: Optional[Callable] = None
+    shortcut: Optional[str] = None
 
 
-class UniversalActions:
-    """Reusable actions with proper debugging and fixes."""
+class SimpleContextMenu(tk.Toplevel):
+    """A lightweight manually controlled context menu."""
 
-    @staticmethod
-    def cut(target_widget):
-        app_logger.debug("Executing Cut Action")
-        selection = UniversalActions.get_selection_range(target_widget)  # Save selection
-        UniversalActions.copy(target_widget)
-        UniversalActions.delete(target_widget, selection)
+    def __init__(self, parent: tk.Widget, menu_items: List[MenuItem]):
+        super().__init__(parent)
+        self.withdraw()
+        self.overrideredirect(True)
+        self.transient(parent)
+        self.parent = parent
+        self.menu_items = menu_items
+        self._selected_index = None
+        self.buttons = []
 
-    @staticmethod
-    def copy(target_widget):
-        app_logger.debug("Executing Copy Action")
+        # Define colors
+        self.bg_color = "#F0F0F0"  # Light gray background
+        self.highlight_color = "#C0C0C0"  # Slightly darker hover
+        self.border_color = "#808080"  # Classic border
+
+        # Create main container
+        self.frame = tk.Frame(self, bg=self.border_color)
+        self.frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        # Inner menu frame
+        self.inner_frame = tk.Frame(self.frame, bg=self.bg_color)
+        self.inner_frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
+        self._populate_menu()
+
+        # Keyboard bindings
+        self.bind("<Up>", self._navigate_up)
+        self.bind("<Down>", self._navigate_down)
+        self.bind("<Return>", self._select_item)
+        self.bind("<Escape>", lambda e: self.hide())
+        self.bind("<FocusOut>", self._on_focus_out)
+
+    def _populate_menu(self):
+        """Creates menu items inside the menu."""
+        for widget in self.inner_frame.winfo_children():
+            widget.destroy()
+        self.buttons.clear()
+        self._selected_index = None
+
+        for index, item in enumerate(self.menu_items):
+            if item.label == "---":
+                tk.Frame(self.inner_frame, height=1, bg=self.border_color).pack(fill=tk.X, padx=5, pady=2)
+                self.buttons.append(None)
+                continue
+
+            row = tk.Frame(self.inner_frame, bg=self.bg_color, padx=5, pady=4)
+            row.pack(fill=tk.X, padx=5, pady=2)
+
+            # Hover effects
+            def on_hover(event, r=row):
+                r.config(bg=self.highlight_color)
+                for child in r.winfo_children():
+                    child.config(bg=self.highlight_color)
+
+            def on_leave(event, r=row):
+                r.config(bg=self.bg_color)
+                for child in r.winfo_children():
+                    child.config(bg=self.bg_color)
+
+            row.bind("<Enter>", on_hover)
+            row.bind("<Leave>", on_leave)
+            row.bind("<Button-1>", lambda e, cmd=item.command: self._run_command(cmd) if cmd else None)
+
+            # Title label (left)
+            title_label = tk.Label(row, text=item.label, bg=self.bg_color, anchor="w", padx=10)
+            title_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            title_label.bind("<Enter>", on_hover)
+            title_label.bind("<Leave>", on_leave)
+            title_label.bind("<Button-1>", lambda e, cmd=item.command: self._run_command(cmd) if cmd else None)
+
+            # Accelerator label (right)
+            if item.shortcut:
+                shortcut_label = tk.Label(row, text=item.shortcut, fg="gray", bg=self.bg_color, anchor="e", padx=10)
+                shortcut_label.pack(side=tk.RIGHT)
+                shortcut_label.bind("<Enter>", on_hover)
+                shortcut_label.bind("<Leave>", on_leave)
+                shortcut_label.bind("<Button-1>", lambda e, cmd=item.command: self._run_command(cmd) if cmd else None)
+
+            self.buttons.append(row)
+
+    def show(self, x, y):
+        """Displays the menu at the given coordinates."""
+        self.geometry(f"+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        self._bind_outside_click()
+
+    def hide(self):
+        """Hides the menu."""
+        self.withdraw()
+
+    def _bind_outside_click(self):
+        """Bind an event that listens for any click outside the menu."""
+        self.parent.bind_all("<Button-1>", self._on_click_outside, add="+")
+        self.parent.bind_all("<Button-3>", self._on_click_outside, add="+")
+
+    def _on_click_outside(self, event):
+        """Closes the menu if the click is outside the menu's bounds."""
         try:
-            text = target_widget.selection_get()
-            pyperclip.copy(text)
-            app_logger.debug(f"Copied text: {text}")
+            if not self.winfo_ismapped():
+                return
+
+            x1, y1, x2, y2 = self.winfo_rootx(), self.winfo_rooty(), self.winfo_rootx() + self.winfo_width(), self.winfo_rooty() + self.winfo_height()
+
+            if not (x1 <= event.x_root <= x2 and y1 <= event.y_root <= y2):
+                self.hide()
         except tk.TclError:
-            app_logger.warning("Copy failed - No selection")
+            self.hide()
 
-    @staticmethod
-    def paste(target_widget):
-        """Paste clipboard text and strip newlines for Entry widgets."""
-        try:
-            text = pyperclip.paste()
-            app_logger.debug(f"Pasting text: {text}")
-            if isinstance(target_widget, ttk.Entry):
-                text = text.replace("\r", "").replace("\n", "")
-            target_widget.insert(tk.INSERT, text)
-        except tk.TclError:
-            app_logger.warning("Paste failed - Could not insert text")
+    def _on_focus_out(self, event):
+        self.hide()
 
-    @staticmethod
-    def delete(target_widget, selection=None):
-        """Deletes selected text, restoring selection if needed."""
-        app_logger.debug("Executing Delete Action")
-        try:
-            if selection:
-                target_widget.mark_set("insert", selection[0])  # Restore cursor
-            target_widget.delete("sel.first", "sel.last")
-        except tk.TclError:
-            app_logger.warning("Delete failed - No selection")
+    def _navigate_up(self, event):
+        if self._selected_index is None:
+            self._highlight(0)
+        else:
+            new_index = (self._selected_index - 1) % len(self.buttons)
+            while self.buttons[new_index] is None:
+                new_index = (new_index - 1) % len(self.buttons)
+            self._highlight(new_index)
 
-    @staticmethod
-    def select_all(target_widget):
-        """Selects all text if available."""
-        if UniversalActions.has_text(target_widget):
-            app_logger.debug("Executing Select All Action")
-            if isinstance(target_widget, tk.Text):
-                target_widget.tag_add("sel", "1.0", tk.END)
-                target_widget.mark_set(tk.INSERT, "1.0")
-            else:
-                target_widget.select_range(0, tk.END)
-                target_widget.icursor(tk.END)
+    def _navigate_down(self, event):
+        if self._selected_index is None:
+            self._highlight(0)
+        else:
+            new_index = (self._selected_index + 1) % len(self.buttons)
+            while self.buttons[new_index] is None:
+                new_index = (new_index + 1) % len(self.buttons)
+            self._highlight(new_index)
 
-    @staticmethod
-    def has_text(widget):
-        """Check if the widget contains text."""
-        try:
-            text = widget.get("1.0", tk.END).strip() if isinstance(widget, tk.Text) else widget.get()
-            has_text = bool(text)
-            app_logger.debug(f"Checking text presence: {has_text}")
-            return has_text
-        except tk.TclError:
-            return False
+    def _select_item(self, event):
+        if self._selected_index is not None and self.buttons[self._selected_index]:
+            self._run_command(self.menu_items[self._selected_index].command)
 
-    @staticmethod
-    def has_selection(widget):
-        """Check if the widget has selected text."""
-        try:
-            selection = widget.selection_get()
-            has_selection = bool(selection)
-            app_logger.debug(f"Checking selection presence: {has_selection}")
-            return has_selection
-        except tk.TclError:
-            return False
+    def _highlight(self, index):
+        if index < len(self.buttons) and self.buttons[index]:
+            self._selected_index = index
+            self.buttons[index].focus_set()
 
-    @staticmethod
-    def get_selection_range(widget):
-        """Get the first and last index of the current selection."""
-        try:
-            return widget.index("sel.first"), widget.index("sel.last")
-        except tk.TclError:
-            return None
+    def _run_command(self, command):
+        if command:
+            command()
+            self.hide()
 
 
-class ContextMenu:
-    """A dynamic context menu that updates before display."""
+# =============================================================================
+#                               Usage Example
+# =============================================================================
 
-    active_menu = None  # Track the currently open menu
-
-    def __init__(self, root, target_widget, actions):
-        self.root = root
-        self.target_widget = target_widget
-        self.menu = Menu(root, tearoff=0)
-        self.actions = actions
-
-        for action in self.actions:
-            if action.separator:
-                self.menu.add_separator()
-            else:
-                self.menu.add_command(
-                    label=action.label,
-                    command=lambda a=action: a.command(target_widget),
-                    accelerator=action.accelerator
-                )
-
-        self.target_widget.bind("<Button-3>", self.show_menu)
-        self.target_widget.bind("<Control-Button-1>", self.show_menu)  # macOS support
-
-        # Global bindings to close menu
-        root.bind("<Button-1>", self.hide_menu, add=True)
-        root.bind("<FocusOut>", self.hide_menu, add=True)
-        root.bind("<Escape>", self.hide_menu, add=True)
-
-    def show_menu(self, event):
-        """Show the menu and update state before posting."""
-        if ContextMenu.active_menu:
-            ContextMenu.active_menu.unpost()
-
-        app_logger.debug(f"Opening context menu for {self.target_widget}")
-
-        # 🔥 Ensure first action updates correctly
-        self.update_state(force=True)
-
-        self.menu.post(event.x_root, event.y_root)
-        ContextMenu.active_menu = self.menu
-
-    def hide_menu(self, event=None):
-        """Hide the menu when clicking elsewhere."""
-        if ContextMenu.active_menu:
-            ContextMenu.active_menu.unpost()
-            ContextMenu.active_menu = None
-
-    def update_state(self, force=False):
-        """Enable or disable actions dynamically."""
-        app_logger.debug("Updating menu state...")
-
-        for action in self.actions:
-            if not action.separator:
-                state = "normal"
-                if action.label in ["Cut", "Copy", "Delete"]:
-                    state = "normal" if UniversalActions.has_selection(self.target_widget) else "disabled"
-                elif action.label == "Paste":
-                    state = "normal" if pyperclip.paste() else "disabled"
-                elif action.label == "Select All":
-                    state = "normal" if UniversalActions.has_text(self.target_widget) else "disabled"
-
-                self.menu.entryconfig(action.label, state=state)
-                app_logger.debug(f"Set '{action.label}' to {state}")
-
-        # 🔥 Ensure the first action updates correctly by forcing a redraw
-        if force:
-            self.menu.update_idletasks()
-
-
-# Define Menus
-def create_text_context_menu(root, target_widget):
-    actions = [
-        ContextMenuAction("Cut", UniversalActions.cut, "Ctrl+X"),
-        ContextMenuAction("Copy", UniversalActions.copy, "Ctrl+C"),
-        ContextMenuAction("Paste", UniversalActions.paste, "Ctrl+V"),
-        ContextMenuAction("Delete", UniversalActions.delete),
-        ContextMenuAction(None, None, separator=True),
-        ContextMenuAction("Select All", UniversalActions.select_all, "Ctrl+A"),
-    ]
-    return ContextMenu(root, target_widget, actions)
-
-
-# Hook into GUI
 if __name__ == "__main__":
     root = tk.Tk()
-    root.title("PHOMOD Context Menu Debug Mode")
+    root.geometry("400x300")
 
-    text_area = tk.Text(root, height=5, width=40)
-    text_area.pack(pady=5, padx=20, fill="both", expand=True)
+    def test_command():
+        print("Clicked!")
 
-    create_text_context_menu(root, text_area)
+    # Define menu items
+    menu_items = [
+        MenuItem("Copy", test_command, "Ctrl+C"),
+        MenuItem("Paste", test_command, "Ctrl+V"),
+        MenuItem("---"),
+        MenuItem("Exit", root.quit, "Alt+F4")
+    ]
+
+    # Function to show the menu
+    def show_menu(event):
+        context_menu = SimpleContextMenu(root, menu_items)
+        context_menu.show(event.x_root, event.y_root)
+
+    # Create a button to trigger the menu
+    button = tk.Button(root, text="Right Click Me")
+    button.pack(pady=50)
+    button.bind("<Button-3>", show_menu)
 
     root.mainloop()

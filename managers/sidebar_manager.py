@@ -1,152 +1,184 @@
-
+# managers/sidebar_manager.py
 import logging
+import tkinter as tk
 from config import SETTINGS
 
-app_log = logging.getLogger("PHOMODLogger")
-
+app_logger = logging.getLogger("PHOMODLogger")
 
 class SidebarManager:
-    """Manages sidebars per tab with persistent positions."""
-
+    """
+    Manages sidebars for each tab with persistent positions and widths.
+    Sidebars can be registered, toggled, repositioned, and resized with their settings saved.
+    """
     def __init__(self, notebook):
-        self.notebook = notebook  # Store notebook reference
-        self.sidebars = {}  # {"tab_name": {"sidebar_key": (sidebar_class, position)}}
-        self.active_sidebar = None
-        self.active_tab = None
-        self.sidebar_frame = None
-        self.sidebar_container = None  # The container (PanedWindow) where the sidebar is attached
+        self.notebook = notebook  # Reference to the main Notebook widget
+        self.sidebars = {}  # {tab_name: {sidebar_key: (sidebar_cls, position)}}
+        self.active_sidebar_key = None
+        self.active_tab_name = None
+        self.active_sidebar_widget = None  # Currently displayed sidebar widget instance
+        self.sidebar_container = None  # The container (typically a PanedWindow) where the sidebar is attached
 
-        # Load sidebar positions from settings
+        # Load persisted positions and widths
         self.sidebar_positions = SETTINGS.get("sidebar_positions", {})
+        self.sidebar_widths = SETTINGS.get("sidebar_widths", {})
         self.cleanup_missing_sidebars()
 
-    def register_sidebar(self, tab_name, key, sidebar_cls):
-        """Registers a sidebar class for a given tab and key, keeping previous position."""
+    def register_sidebar(self, tab_name, sidebar_key, sidebar_cls):
+        """
+        Registers a sidebar class for a specific tab under a unique key.
+        Loads the last known position from settings (default is "left").
+        """
         if tab_name not in self.sidebars:
             self.sidebars[tab_name] = {}
+        position = self.sidebar_positions.get(tab_name, {}).get(sidebar_key, "left")
+        self.sidebars[tab_name][sidebar_key] = (sidebar_cls, position)
+        app_logger.debug(f"Registered sidebar '{sidebar_key}' for tab '{tab_name}' with position '{position}'.")
 
-        # Load last known position, default to "left"
-        position = self.sidebar_positions.get(tab_name, {}).get(key, "left")
-        self.sidebars[tab_name][key] = (sidebar_cls, position)
-        app_log.debug(f"Registered sidebar '{key}' under tab '{tab_name}' with position '{position}'.")
-
-    def toggle_sidebar(self, tab_name, key):
-        """Toggles sidebar visibility inside the active tab."""
-        if self.active_tab != tab_name:
+    def toggle_sidebar(self, tab_name, sidebar_key):
+        """
+        Toggles the visibility of a sidebar within a given tab.
+        If the sidebar is already active, it is hidden; otherwise, it is shown.
+        """
+        # If switching tabs, hide any active sidebar first.
+        if self.active_tab_name != tab_name:
             self.hide_sidebar()
-            self.active_tab = tab_name
+            self.active_tab_name = tab_name
 
-        # Toggle off if the same sidebar is active
-        if self.active_sidebar == key:
+        # If the same sidebar is active, toggle it off.
+        if self.active_sidebar_key == sidebar_key:
             self.hide_sidebar()
             return
 
-        self.hide_sidebar()
+        self.hide_sidebar()  # Hide any active sidebar before showing the new one.
 
-        if key in self.sidebars.get(tab_name, {}):
-            sidebar_cls, position = self.sidebars[tab_name][key]
+        # Check that the sidebar is registered for the tab.
+        if sidebar_key not in self.sidebars.get(tab_name, {}):
+            app_logger.warning(f"Sidebar '{sidebar_key}' not registered for tab '{tab_name}'.")
+            return
 
-            # Get the active tab's PanedWindow container
-            tab_container = self.get_tab_container(tab_name)
-            if not tab_container:
-                app_log.warning(f"⚠️ No container found for tab '{tab_name}', sidebar won't open.")
-                return
+        sidebar_cls, position = self.sidebars[tab_name][sidebar_key]
+        tab_container = self.get_tab_container(tab_name)
+        if not tab_container:
+            app_logger.warning(f"No container found for tab '{tab_name}'; cannot show sidebar.")
+            return
 
-            # Create a new sidebar instance and add it to the tab container
-            sidebar = sidebar_cls(tab_container, tab_name, self, key)
-            self._add_sidebar(sidebar, tab_name, position)
-            self.active_sidebar = key
-            app_log.debug(f"✅ Opened sidebar '{key}' inside tab '{tab_name}'.")
+        # Instantiate and add the sidebar widget.
+        sidebar_widget = sidebar_cls(tab_container, tab_name, self, sidebar_key)
+        self._add_sidebar(sidebar_widget, tab_name, position)
+        self.active_sidebar_key = sidebar_key
+        self.active_sidebar_widget = sidebar_widget
+        app_logger.debug(f"Sidebar '{sidebar_key}' toggled on for tab '{tab_name}'.")
 
     def get_tab_container(self, tab_name):
-        """Finds and returns the PanedWindow inside the correct tab."""
+        """
+        Retrieves the container widget (e.g., a PanedWindow) for the specified tab.
+        It first checks if the tab has an attribute 'sidebar_container'; otherwise, it searches
+        for a PanedWindow child.
+        """
         for tab in self.notebook.winfo_children():
-            # Expecting each tab to be an instance of TestTab with attribute 'tab_name'
-            if hasattr(tab, "tab_name") and tab.tab_name == tab_name:
-                return tab.paned  # Return the tab's PanedWindow
-        app_log.warning(f"⚠️ Tab '{tab_name}' not found.")
+            if getattr(tab, "tab_name", None) == tab_name:
+                container = getattr(tab, "sidebar_container", None)
+                if container:
+                    return container
+                # Fallback: return the first PanedWindow child.
+                for child in tab.winfo_children():
+                    if isinstance(child, tk.PanedWindow):
+                        return child
+        app_logger.warning(f"Tab container for '{tab_name}' not found.")
         return None
 
     def hide_sidebar(self):
-        """Hides the currently active sidebar."""
-        if self.active_sidebar and self.active_tab and self.sidebar_frame:
-            container = self.sidebar_container or self.get_tab_container(self.active_tab)
-            if container:
-                container.forget(self.sidebar_frame)
-            self.sidebar_frame.destroy()
-            app_log.debug(f"❌ Closed sidebar '{self.active_sidebar}' on tab '{self.active_tab}'.")
-
-        self.active_sidebar = None
-        self.sidebar_frame = None
+        """Hides and destroys the currently active sidebar widget."""
+        if self.active_sidebar_widget and self.active_tab_name:
+            container = self.sidebar_container or self.get_tab_container(self.active_tab_name)
+            if container and self.active_sidebar_widget in container.panes():
+                container.forget(self.active_sidebar_widget)
+            try:
+                self.active_sidebar_widget.destroy()
+            except Exception as e:
+                app_logger.error(f"Error destroying sidebar: {e}")
+            app_logger.debug(f"Sidebar '{self.active_sidebar_key}' hidden for tab '{self.active_tab_name}'.")
+        self.active_sidebar_key = None
+        self.active_sidebar_widget = None
         self.sidebar_container = None
 
-    def _add_sidebar(self, sidebar, tab_name, position):
-        """Adds the sidebar to the tab’s PanedWindow."""
+    def _add_sidebar(self, sidebar_widget, tab_name, position):
+        """
+        Adds the sidebar widget to the container in the specified position.
+        """
         tab_container = self.get_tab_container(tab_name)
         if not tab_container:
-            app_log.warning(f"⚠️ Sidebar '{self.active_sidebar}' could not be placed in '{tab_name}' (Tab missing).")
+            app_logger.warning(f"Cannot add sidebar; container for tab '{tab_name}' not found.")
             return
-
-        # Remove any existing sidebar in this container
-        if self.sidebar_frame and self.sidebar_frame != sidebar:
-            tab_container.forget(self.sidebar_frame)
-
-        # Place the sidebar on the correct side
-        if position == "right":
-            tab_container.add(sidebar, weight=1)
+        # Remove any existing sidebar.
+        if self.active_sidebar_widget and self.active_sidebar_widget != sidebar_widget:
+            tab_container.forget(self.active_sidebar_widget)
+        # Place the sidebar widget based on the desired position.
+        if position.lower() == "right":
+            tab_container.add(sidebar_widget, weight=1)
         else:
-            tab_container.insert(0, sidebar, weight=1)
-
-        self.sidebar_frame = sidebar
+            # Default to left; insert at index 0.
+            tab_container.insert(0, sidebar_widget, weight=1)
         self.sidebar_container = tab_container
-        app_log.debug(f"📌 Sidebar placed on the {position} inside tab '{tab_name}'.")
+        app_logger.debug(f"Sidebar added to '{position}' side of tab '{tab_name}'.")
 
-    def _move_sidebar(self, tab_name, key, position):
-        """Moves a sidebar left or right, persists setting, and re-adds it."""
-        if key in self.sidebars.get(tab_name, {}):
-            sidebar_cls, current_position = self.sidebars[tab_name][key]
-            if current_position == position:
-                return  # No change needed
+    def move_sidebar(self, tab_name, sidebar_key, new_position):
+        """
+        Moves a sidebar to a new position ('left' or 'right') within its tab.
+        Persists the change to settings.
+        """
+        if sidebar_key not in self.sidebars.get(tab_name, {}):
+            app_logger.warning(f"Sidebar '{sidebar_key}' not registered for tab '{tab_name}'.")
+            return
+        sidebar_cls, current_position = self.sidebars[tab_name][sidebar_key]
+        if current_position == new_position:
+            return  # No change required.
+        # Update the in-memory record.
+        self.sidebars[tab_name][sidebar_key] = (sidebar_cls, new_position)
+        # Update and save settings.
+        positions = SETTINGS.get("sidebar_positions", {})
+        positions.setdefault(tab_name, {})[sidebar_key] = new_position
+        SETTINGS["sidebar_positions"] = positions
+        SETTINGS.save()
+        self.hide_sidebar()
+        self.toggle_sidebar(tab_name, sidebar_key)
+        app_logger.debug(f"Sidebar '{sidebar_key}' moved to '{new_position}' in tab '{tab_name}'.")
 
-            # Update position in memory and settings
-            self.sidebars[tab_name][key] = (sidebar_cls, position)
-            self.sidebar_positions.setdefault(tab_name, {})[key] = position
-            SETTINGS.save_settings({"sidebar_positions": self.sidebar_positions})
-            self.hide_sidebar()
-            self.toggle_sidebar(tab_name, key)
-            app_log.debug(f"🔄 Moved sidebar '{key}' on tab '{tab_name}' to the {position}.")
-
-    def _on_sidebar_resize(self, event):
-        """Saves the sidebar width when resized."""
-        if self.active_sidebar and self.active_tab and self.sidebar_frame:
+    def on_sidebar_resize(self, event):
+        """
+        Callback to persist the sidebar width when resized.
+        """
+        if self.active_sidebar_key and self.active_tab_name and self.active_sidebar_widget:
             try:
-                # Use winfo_width to get the current width of the sidebar
-                width = self.sidebar_frame.winfo_width()
-                sidebar_widths = SETTINGS.get("sidebar_widths", {})
-                sidebar_widths.setdefault(self.active_tab, {})[self.active_sidebar] = width
-                SETTINGS.save_settings({"sidebar_widths": sidebar_widths})
-                app_log.debug(f"💾 Saved sidebar '{self.active_sidebar}' width: {width}.")
+                width = self.active_sidebar_widget.winfo_width()
+                widths = SETTINGS.get("sidebar_widths", {})
+                widths.setdefault(self.active_tab_name, {})[self.active_sidebar_key] = width
+                SETTINGS["sidebar_widths"] = widths
+                SETTINGS.save()
+                app_logger.debug(f"Sidebar '{self.active_sidebar_key}' width saved as {width}.")
             except Exception as e:
-                app_log.warning(f"⚠️ Failed to save sidebar width: {e}")
+                app_logger.warning(f"Failed to save sidebar width: {e}")
 
     def cleanup_missing_sidebars(self):
-        """Removes settings for sidebars that no longer exist."""
+        """
+        Removes any stored settings for sidebars that are no longer registered.
+        """
         updated_positions = {}
         updated_widths = {}
-
-        for tab, sidebars in SETTINGS.get("sidebar_positions", {}).items():
-            for key in list(sidebars):
-                if key not in self.sidebars.get(tab, {}):
-                    app_log.warning(f"⚠️ Removing stale sidebar setting: {key} on {tab}")
-                else:
-                    updated_positions.setdefault(tab, {})[key] = sidebars[key]
-
-        for tab, sidebars in SETTINGS.get("sidebar_widths", {}).items():
-            for key in list(sidebars):
-                if key in updated_positions.get(tab, {}):
-                    updated_widths.setdefault(tab, {})[key] = sidebars[key]
-
-        SETTINGS.save_settings({
-            "sidebar_positions": updated_positions,
-            "sidebar_widths": updated_widths
-        })
+        stored_positions = SETTINGS.get("sidebar_positions", {})
+        for tab, sidebars in stored_positions.items():
+            if tab in self.sidebars:
+                for key, pos in sidebars.items():
+                    if key in self.sidebars[tab]:
+                        updated_positions.setdefault(tab, {})[key] = pos
+                    else:
+                        app_logger.warning(f"Removing stale sidebar setting '{key}' in tab '{tab}'.")
+        stored_widths = SETTINGS.get("sidebar_widths", {})
+        for tab, sidebars in stored_widths.items():
+            if tab in updated_positions:
+                for key, width in sidebars.items():
+                    if key in updated_positions[tab]:
+                        updated_widths.setdefault(tab, {})[key] = width
+        SETTINGS["sidebar_positions"] = updated_positions
+        SETTINGS["sidebar_widths"] = updated_widths
+        SETTINGS.save()

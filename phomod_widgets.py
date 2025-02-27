@@ -87,19 +87,25 @@ class PHOMODLabel(ttk.Label, PHOMODHelpTextMixin):
 
 class PHOMODEntry(ttk.Entry, PHOMODHelpTextMixin, PHOMODContextMenuMixin, PHOMODScrollRedirectMixin):
     """An entry widget that redirects mouse scroll events to the parent scrollable frame."""
-    def __init__(self, parent, textvariable=None, help_text=None, context_menu=None, **kwargs):
+    def __init__(self, parent, textvariable=None, help_text=None, custom_menu_items=None, **kwargs):
         super().__init__(parent, textvariable=textvariable, **kwargs)
         self._bind_help_text(parent, help_text)
-        self._bind_context_menu(context_menu)
+
+        if custom_menu_items:
+            self.attach_context_menu(self)
 
 
 class PHOMODTextArea(tk.Text, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
-    """A multi-line text widget with help text and context menu integration, now with optional scrollbars."""
-    def __init__(self, parent, help_text=None, context_menu=None, attach_x=False, attach_y=True, **kwargs):
-        super().__init__(parent, **kwargs)
+    """A multi-line text widget with help text and optional scrollbars, now with context menu integration."""
+
+    def __init__(self, parent, help_text=None, attach_x=False, attach_y=True, custom_menu_items=None, **kwargs):
+        tk.Text.__init__(self, parent, **kwargs)
+        PHOMODContextMenuMixin.__init__(self, custom_menu_items=custom_menu_items)
         self._bind_help_text(parent, help_text)
-        self._bind_context_menu(context_menu)
         self.scroll_helper = _PHOMODAttachableScrollbar(self, attach_x=attach_x, attach_y=attach_y)
+
+        if custom_menu_items:
+            self.attach_context_menu(self)
 
 
 class PHOMODSyntaxTextArea(PHOMODTextArea):
@@ -184,13 +190,14 @@ class PHOMODComboBox(ttk.Combobox, PHOMODHelpTextMixin, PHOMODScrollRedirectMixi
 class PHOMODListbox(tk.Listbox, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
     """A listbox widget with a built-in scrollbar, padding, and optional help text/context menu."""
 
-    def __init__(self, parent, height=10, help_text=None, context_menu=None, attach_x=False, attach_y=True, **kwargs):
+    def __init__(self, parent, height=10, help_text=None, custom_menu_items=None, attach_x=False, attach_y=True, **kwargs):
         super().__init__(parent, height=height, **kwargs)
 
         self.scroll_helper = _PHOMODAttachableScrollbar(self, attach_x=attach_x, attach_y=attach_y)
-
         self._bind_help_text(parent, help_text)
-        self._bind_context_menu(context_menu)
+
+        if custom_menu_items:
+            self.attach_context_menu(self)
 
     def add_item(self, item: str):
         """Adds an item to the listbox."""
@@ -210,16 +217,15 @@ class PHOMODListbox(tk.Listbox, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
 class PHOMODTreeview(ttk.Treeview, PHOMODHelpTextMixin, PHOMODContextMenuMixin):
     """A treeview widget with a built-in scrollbar, padded properly, and optional help text/context menu."""
 
-    def __init__(self, parent, columns, help_text=None, context_menu=None, attach_x=False, attach_y=True, **kwargs):
+    def __init__(self, parent, columns, help_text=None, custom_menu_items=None, attach_x=False, attach_y=True, **kwargs):
         kwargs.setdefault("show", "tree headings")  # Only set `show` if not already provided
         super().__init__(parent, columns=columns, **kwargs)
 
-        # Attach scrollbars dynamically
         self.scroll_helper = _PHOMODAttachableScrollbar(self, attach_x=attach_x, attach_y=attach_y, pady=5)
-
-        # Properly inherit from mixins (automatic binding)
         self._bind_help_text(parent, help_text)
-        self._bind_context_menu(context_menu)
+
+        if custom_menu_items:
+            self.attach_context_menu(self)
 
     def add_item(self, parent, text, values=None):
         """Adds an item to the tree under the specified parent node."""

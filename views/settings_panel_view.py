@@ -1,4 +1,3 @@
-
 import logging
 import threading
 import tkinter as tk
@@ -15,27 +14,38 @@ app_logger = logging.getLogger('PHOMODLogger')
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                               Base 🏗️
+#                                               Base Settings Section 🏗️
 # ----------------------------------------------------------------------------------------------------------------------
 class BaseSettingsSection(PHOMODLabelFrame):
     def __init__(self, parent, controller, title, help_text, **kwargs):
+        # Attempt to retrieve fonts from controller or its UI; fallback to defaults.
+        fonts = None
+        if hasattr(controller, "fonts"):
+            fonts = controller.fonts
+        elif hasattr(controller, "ui") and hasattr(controller.ui, "fonts"):
+            fonts = controller.ui.fonts
+        if fonts is None:
+            fonts = {
+                "title": ("Helvetica", 12, "bold"),
+                "italic": ("Helvetica", 10, "italic")
+            }
         title_label = PHOMODLabel(
-            parent, text=title, font=controller.fonts["title"], help_text=help_text
+            parent, text=title, font=fonts["title"], help_text=help_text
         )
         super().__init__(parent, controller=controller, label_widget=title_label, help_text=help_text, **kwargs)
         self.controller = controller
+        self.fonts = fonts  # Save fonts for later use in child sections
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                     Theme Settings 🎨
+#                                           Theme Settings Section 🎨
 # ----------------------------------------------------------------------------------------------------------------------
 class ThemeSettingsSection(BaseSettingsSection):
     """Settings section for selecting and applying themes."""
-
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Theme Selection", "Change the application's theme.")
         self.theme_manager = controller.theme_manager
-        # Use the current theme from the theme manager (already capitalized)
+        # Use the current theme from the theme manager (assumed already capitalized)
         self.theme_var = tk.StringVar(value=self.theme_manager.get_theme())
         self._build()
 
@@ -43,7 +53,7 @@ class ThemeSettingsSection(BaseSettingsSection):
         self.theme_menu = PHOMODComboBox(
             self,
             textvariable=self.theme_var,
-            values=self.theme_manager.get_themes(),  # Themes are already capitalized.
+            values=self.theme_manager.get_themes(),
             state="readonly",
             help_text="Select a theme for the application interface."
         )
@@ -52,7 +62,7 @@ class ThemeSettingsSection(BaseSettingsSection):
 
         self.current_theme_label = PHOMODLabel(
             self,
-            font=self.controller.fonts["italic"],
+            font=self.fonts["italic"],
             text=self.theme_var.get(),
             textvariable=self.theme_var,
             help_text="Displays the currently active theme. Click to apply a random one!"
@@ -80,12 +90,11 @@ class ThemeSettingsSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                    Update Settings 🔄
+#                                          Update Settings Section 🔄
 # ----------------------------------------------------------------------------------------------------------------------
 class UpdateSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Update Settings", "Configure automatic update checks.")
-
         self.auto_update_var = tk.BooleanVar(value=True)
         self._build()
 
@@ -105,19 +114,16 @@ class UpdateSettingsSection(BaseSettingsSection):
     def check_for_updates(self):
         self.controller.update_status_bar_text("Checking for updates...")
         app_logger.info("Checking for updates...")
-
         threading.Timer(2.0, lambda: self.controller.update_status_bar_text("No updates available.")).start()
-
         app_logger.info("Update check completed.")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                 UI & Accessibility 🌎
+#                                     UI & Accessibility Settings Section 🌎
 # ----------------------------------------------------------------------------------------------------------------------
 class UIAccessibilitySettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "UI & Accessibility", "Customize interface settings.")
-
         self.language_var = tk.StringVar(value="English")
         self.font_size_var = tk.StringVar(value="Normal")
         self._build()
@@ -159,12 +165,11 @@ class UIAccessibilitySettingsSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                              File & Data Management 🗄
+#                                    File & Data Management Settings Section 🗄
 # ----------------------------------------------------------------------------------------------------------------------
 class FileDataSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "File & Data Management", "Manage file paths and directories.")
-
         self.starting_dir_var = tk.StringVar(value="Not Set")
         self._build()
 
@@ -191,21 +196,19 @@ class FileDataSettingsSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                   Logging Settings 📜
+#                                     Logging Settings Section 📜
 # ----------------------------------------------------------------------------------------------------------------------
 class LoggingSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Logging Settings", "Configure logging preferences.")
-        self.disable_logging_var    = tk.BooleanVar(value=SETTINGS.get("disable_file_logging", False))
-        self.log_rotation_var       = tk.StringVar(value=SETTINGS.get("log_rotation", "Max file size"))
-        self.log_path_var           = tk.StringVar(value=SETTINGS.get("logs_dir", "Not Set"))
-        self.log_file_size_var      = tk.IntVar(value=SETTINGS.get("max_log_size_mb", 37))
-        self.log_level_var          = tk.StringVar(value=SETTINGS.get("log_level", "INFO"))
-
+        self.disable_logging_var = tk.BooleanVar(value=SETTINGS.get("disable_file_logging", False))
+        self.log_rotation_var = tk.StringVar(value=SETTINGS.get("log_rotation", "Max file size"))
+        self.log_path_var = tk.StringVar(value=SETTINGS.get("logs_dir", "Not Set"))
+        self.log_file_size_var = tk.IntVar(value=SETTINGS.get("max_log_size_mb", 37))
+        self.log_level_var = tk.StringVar(value=SETTINGS.get("log_level", "INFO"))
         self._build()
 
     def _build(self):
-        # Log Level Dropdown
         PHOMODLabel(self, text="Log Level:", help_text="Set the verbosity of logging output.").pack(anchor="w", padx=5, pady=2)
         self.log_level_menu = PHOMODComboBox(
             self,
@@ -217,7 +220,6 @@ class LoggingSettingsSection(BaseSettingsSection):
         self.log_level_menu.pack(fill=tk.X, padx=5, pady=5)
         self.log_level_menu.bind("<<ComboboxSelected>>", self.on_log_level_change)
 
-        # Log Rotation Dropdown
         PHOMODLabel(self, text="Log Rotation:", help_text="Select log rotation frequency.").pack(anchor="w", padx=5, pady=2)
         self.log_rotation_menu = PHOMODComboBox(
             self,
@@ -229,7 +231,6 @@ class LoggingSettingsSection(BaseSettingsSection):
         self.log_rotation_menu.pack(fill=tk.X, padx=5, pady=5)
         self.log_rotation_menu.bind("<<ComboboxSelected>>", self.on_log_rotation_change)
 
-        # Max Log Size Entry
         self.log_file_size_frame = PHOMODFrame(self)
         PHOMODLabel(self.log_file_size_frame, text="Max File Size (MB):").pack(side="left", padx=(5, 2))
         self.log_file_size_entry = PHOMODEntry(
@@ -241,7 +242,6 @@ class LoggingSettingsSection(BaseSettingsSection):
         self.log_file_size_entry.bind("<FocusOut>", self.on_log_file_size_change)
         self.log_file_size_frame.pack(anchor="w", padx=5, pady=5)
 
-        # Log File Location
         PHOMODLabel(self, text="Log File Location:", help_text="Choose where logs are stored.").pack(anchor="w", padx=5, pady=2)
         self.log_path_entry = PHOMODEntry(self, textvariable=self.log_path_var, state="readonly")
         self.log_path_entry.pack(fill=tk.X, padx=5, pady=5)
@@ -253,7 +253,6 @@ class LoggingSettingsSection(BaseSettingsSection):
         )
         self.log_path_button.pack(padx=5, pady=5)
 
-        # Disable File Logging Checkbox
         self.disable_logging_check = PHOMODCheckbutton(
             self,
             text="Disable File Logging",
@@ -263,24 +262,17 @@ class LoggingSettingsSection(BaseSettingsSection):
         )
         self.disable_logging_check.pack(anchor="w", padx=5, pady=5)
 
-        # Initialize UI state in a defined order
         self.on_disable_logging_change()
         self.on_log_rotation_change()
-
         app_logger.info("🏗️ Logging Settings section created.")
 
     def update_file_size_entry_state(self):
-        """
-        Updates the state of the max file size entry based on the current log rotation
-        setting and whether logging is disabled.
-        """
         is_max_file_size = self.log_rotation_var.get() == "Max file size"
         is_disabled = self.disable_logging_var.get()
         new_state = "normal" if is_max_file_size and not is_disabled else "disabled"
         self.log_file_size_entry.config(state=new_state)
 
     def choose_log_location(self):
-        """Opens a dialog to choose the log directory and updates the settings immediately."""
         if not self.disable_logging_var.get():
             directory = filedialog.askdirectory()
             if directory:
@@ -289,7 +281,6 @@ class LoggingSettingsSection(BaseSettingsSection):
                 app_logger.info(f"📁 Log directory set to: {directory}")
 
     def on_log_file_size_change(self, *_):
-        """Saves the max log file size when the entry loses focus, with input validation."""
         if self.log_rotation_var.get() == "Max file size":
             try:
                 size = int(self.log_file_size_var.get())
@@ -301,13 +292,11 @@ class LoggingSettingsSection(BaseSettingsSection):
                 app_logger.warning("⚠️ Invalid file size entered. Please enter a positive integer.")
 
     def on_log_rotation_change(self, *_):
-        """Saves log rotation setting and updates the file size entry state."""
         SETTINGS.set("log_rotation", self.log_rotation_var.get())
         app_logger.info(f"🔄 Log rotation updated: {self.log_rotation_var.get()}")
         self.update_file_size_entry_state()
 
     def on_disable_logging_change(self, *_):
-        """Updates UI based on the disable logging checkbox and saves the setting."""
         is_disabled = self.disable_logging_var.get()
         self.log_rotation_menu.config(state="disabled" if is_disabled else "readonly")
         self.log_path_entry.config(state="disabled" if is_disabled else "readonly")
@@ -317,7 +306,6 @@ class LoggingSettingsSection(BaseSettingsSection):
         self.update_file_size_entry_state()
 
     def on_log_level_change(self, *_):
-        """Updates the log level dynamically and saves immediately."""
         new_level = self.log_level_var.get()
         SETTINGS.set("log_level", new_level)
         log_level_map = {
@@ -332,21 +320,19 @@ class LoggingSettingsSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                               Tab Control Settings 📂
+#                                     Workspace Control Settings Section 📂
 # ----------------------------------------------------------------------------------------------------------------------
 class WorkspaceControlSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, "Tab Control", "Hide or show certain workspaces.")
         self.hidden_workspaces = {}
-        self.required_workspaces = {"Project", "Settings"}  # Required workspaces can't be hidden
+        self.required_workspaces = {"Project", "Settings"}  # Required workspaces cannot be hidden
         self._build()
 
     def _build(self):
         workspaces_check_frame = PHOMODFrame(self)
         workspaces_check_frame.pack(fill=tk.X, padx=5, pady=5)
-
         available_workspaces = self.controller.workspace_manager.get_available_workspaces()
-
         for workspace_label in available_workspaces:
             if workspace_label not in self.required_workspaces:
                 self.hidden_workspaces[workspace_label] = tk.BooleanVar(value=False)
@@ -357,11 +343,9 @@ class WorkspaceControlSettingsSection(BaseSettingsSection):
                     variable=self.hidden_workspaces[workspace_label],
                     help_text=f"Toggle visibility of the {workspace_label} workspace."
                 ).pack(anchor="w", padx=5, pady=2)
-
         app_logger.info("🏗️ Tab Control section created.")
 
     def apply_workspace_visibility(self):
-        """Apply workspace visibility settings."""
         for workspace_label, var in self.hidden_workspaces.items():
             if var.get():
                 self.controller.workspace_manager.hide_workspace(workspace_label)
@@ -370,7 +354,7 @@ class WorkspaceControlSettingsSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                   Advanced Options 🔧
+#                                     Advanced Options Settings Section 🔧
 # ----------------------------------------------------------------------------------------------------------------------
 class AdvancedSettingsSection(BaseSettingsSection):
     def __init__(self, parent, controller):
@@ -387,7 +371,7 @@ class AdvancedSettingsSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                      About Section ℹ️
+#                                             About Section ℹ️
 # ----------------------------------------------------------------------------------------------------------------------
 class AboutSection(BaseSettingsSection):
     def __init__(self, parent, controller):
@@ -408,21 +392,17 @@ class AboutSection(BaseSettingsSection):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-#                                                                                                               Main 🏠
+#                                             Main Settings Panel View 🏠
 # ----------------------------------------------------------------------------------------------------------------------
-class SettingsTab(PHOMODFrame):
+class SettingsPanelView(PHOMODScrollableFrame):
     def __init__(self, parent, controller, *args, **kwargs):
         super().__init__(parent, controller=controller, *args, **kwargs)
-        self.controller = controller
-        self._create_scrollable_container()
-        self._populate_sections()
         app_logger.info(f"🚦 Initializing {self.__class__.__name__}")
+        self.controller = controller
+        self._populate_sections()
+        self.after(0, self._apply_current_theme)
         self.controller.update_status_bar_text("🛠️ Settings loaded successfully!")
 
-    def _create_scrollable_container(self):
-        self.scrollable_frame = PHOMODScrollableFrame(self, controller=self.controller)
-        self.scrollable_frame.pack(fill=tk.BOTH, expand=True)
-        self.inner_frame = self.scrollable_frame.inner_frame
 
     def _populate_sections(self):
         ThemeSettingsSection(self.inner_frame, self.controller).pack(fill=tk.X, padx=5, pady=10)
@@ -434,11 +414,8 @@ class SettingsTab(PHOMODFrame):
         AdvancedSettingsSection(self.inner_frame, self.controller).pack(fill=tk.X, padx=5, pady=10)
         AboutSection(self.inner_frame, self.controller).pack(fill=tk.BOTH, expand=True, padx=5, pady=10)
 
-        # Refresh the theme after all sections are built.
-        self.after(0, self._apply_current_theme)
-
     def _apply_current_theme(self):
-        """Ensures that the current theme is properly re-applied after sections are built."""
+        """Ensures that the current theme is applied after all sections are built."""
         theme = self.controller.theme_manager.get_theme() or "Arc"
         applied_theme = self.controller.theme_manager.apply_theme(theme, force=True)
         if applied_theme is None:
