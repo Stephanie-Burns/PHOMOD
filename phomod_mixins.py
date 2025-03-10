@@ -47,6 +47,7 @@ class PHOMODContextMenuMixin:
     def attach_context_menu(self, widget: tk.Widget):
         """Attach the context menu to the given widget."""
         if not self.context_menu_manager:
+            self.context_menu_config.mode = "dark"
             self.context_menu_manager = ContextMenuManager(widget, self.context_menu_config)
             self.context_menu_manager.attach(widget, self.menu_items)
 

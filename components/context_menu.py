@@ -34,21 +34,44 @@ class ContextMenuConfig:
     """
     Configuration class for the context menu's appearance and behavior.
 
-    The graphical defaults are set to mimic your bare bones prototype.
+    Supports both light and dark mode dynamically.
     """
     show_icons: bool = True
     menu_padding: int = 10         # Overall padding for the menu
     item_spacing: int = 5          # Spacing between items
     title_accelerator_spacing: int = 60
     icon_title_spacing: int = 6
-    border_color: str = "#808080"   # Border color from prototype
-    highlight_color: str = "#C0C0C0"  # Hover color from prototype
-    separator_color: str = "#808080"  # Separator color same as border
     default_animation: str = "fade"
     fade_duration: int = 20
     slide_distance: int = 30
     bounce_heights: List[int] = field(default_factory=lambda: [0, -5, -10, -5, 0])
     shadow_effect: bool = True
+
+    # Light/Dark mode handling
+    mode: str = "light"  # "light" or "dark"
+
+    # Color schemes for both modes
+    light_mode: dict = field(default_factory=lambda: {
+        "border_color": "#808080",
+        "background_color": "#F0F0F0",
+        "highlight_color": "#C0C0C0",
+        "text_color": "black",
+        "shortcut_color": "gray",
+        "separator_color": "#808080"
+    })
+
+    dark_mode: dict = field(default_factory=lambda: {
+        "border_color": "#555555",
+        "background_color": "#2B2B2B",
+        "highlight_color": "#3D3D3D",
+        "text_color": "#E0E0E0",
+        "shortcut_color": "#B0B0B0",
+        "separator_color": "#555555"
+    })
+
+    def get_colors(self) -> dict:
+        """Returns the appropriate color set based on the mode."""
+        return self.dark_mode if self.mode == "dark" else self.light_mode
 
 
 # =============================================================================
@@ -120,12 +143,16 @@ class ContextMenu(tk.Toplevel):
         self.parent = parent
         self.asset_manager = asset_manager
 
-        # Set style colors from the prototype.
-        self.base_bg = "#F0F0F0"
-        self.hover_bg = self.config_obj.highlight_color  # "#C0C0C0"
-        self.border_color = self.config_obj.border_color   # "#808080"
+        # Retrieve color scheme based on the mode.
+        colors = self.config_obj.get_colors()
+        self.border_color = colors["border_color"]
+        self.base_bg = colors["background_color"]
+        self.hover_bg = colors["highlight_color"]
+        self.text_color = colors["text_color"]
+        self.shortcut_color = colors["shortcut_color"]
+        self.separator_color = colors["separator_color"]
 
-        # Build the container with an outer border (like the prototype).
+        # Build the container with an outer border.
         self.container = tk.Frame(self, bg=self.border_color)
         self.container.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         # Inner frame holds the menu items.
@@ -303,7 +330,7 @@ class ContextMenu(tk.Toplevel):
 
         for index, item in enumerate(self.menu_items):
             if item.label == "---":
-                separator = tk.Frame(self.frame, height=1, bg=self.border_color)
+                separator = tk.Frame(self.frame, height=1, bg=self.separator_color)
                 separator.pack(fill=tk.X, padx=self.config_obj.item_spacing, pady=self.config_obj.item_spacing)
                 self.buttons.append(None)
                 continue
@@ -326,7 +353,7 @@ class ContextMenu(tk.Toplevel):
                 icon_label.bind("<Button-1>", lambda e, cmd=item.command: self._run_command(cmd))
 
             # Title label.
-            main_label = tk.Label(row, text=item.label, bg=self.base_bg, fg="black", anchor="w", padx=10)
+            main_label = tk.Label(row, text=item.label, bg=self.base_bg, fg=self.text_color, anchor="w", padx=10)
             main_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
             main_label.bind("<Enter>", lambda e, r=row: self._set_hover(r, True))
             main_label.bind("<Leave>", lambda e, r=row: self._set_hover(r, False))
@@ -335,7 +362,7 @@ class ContextMenu(tk.Toplevel):
             # Shortcut label (if applicable).
             formatted_shortcut = self._format_shortcut(item.shortcut)
             if formatted_shortcut:
-                shortcut_label = tk.Label(row, text=formatted_shortcut, bg=self.base_bg, fg="gray", anchor="e", padx=10)
+                shortcut_label = tk.Label(row, text=formatted_shortcut, bg=self.base_bg, fg=self.shortcut_color, anchor="e", padx=10)
                 shortcut_label.pack(side=tk.RIGHT, padx=(self.config_obj.title_accelerator_spacing, self.config_obj.item_spacing))
                 shortcut_label.bind("<Enter>", lambda e, r=row: self._set_hover(r, True))
                 shortcut_label.bind("<Leave>", lambda e, r=row: self._set_hover(r, False))
