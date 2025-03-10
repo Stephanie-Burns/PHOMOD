@@ -54,18 +54,3 @@ PHOMOD is a FOMOD generator with a **non-destructive philosophy**. The UI should
 | **FOMOD XML Generation** | Full control over **FOMOD config creation** |
 | **Non-Destructive Workflow** | Never overwrites user data **unless explicitly confirmed** |
 | **Mod Packaging** | Archive mods into **structured zips** for easy distribution |
-
----
-
-## 4. Next Steps
-1. **Build the Core Layout**: Implement frames, sidebar, treeview.
-2. **Integrate Drag-and-Drop**: Ensure **folder & image handling** works cleanly.
-3. **Hook up the Backend**: Connect **XML writer and project management**.
-4. **Implement Customization**: Add **theme options, backgrounds, and settings**.
-5. **Refine UX**: Polish interactions (animations, smooth transitions).
-6. **Testing & Debugging**: Make sure it **works across different setups**.
-
----
-
-## Closing Thoughts
-The **goal** is to make **PHOMOD fun, functional, and flexible**—a tool modders will **enjoy using** instead of dreading. The UI should be **clean but inviting**, with **small cute touches** that make it **pleasant to interact with**.
